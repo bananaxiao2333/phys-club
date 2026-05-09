@@ -9,12 +9,15 @@ import {
   DialogTitle,
   Divider,
   Drawer,
+  FormControl,
   IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  MenuItem,
   Popover,
+  Select,
   Stack,
   TextField,
   Toolbar,
@@ -26,6 +29,9 @@ import {
   Home as HomeIcon,
   Info as InfoIcon,
   LockReset as LockResetIcon,
+  BrightnessAuto as AutoIcon,
+  DarkMode as DarkIcon,
+  LightMode as LightIcon,
   Login as LoginIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
@@ -33,7 +39,8 @@ import {
   Person as PersonIcon,
   Security as SecurityIcon
 } from '@mui/icons-material';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useTheme } from '@mui/material/styles';
 import { api } from '../api.js';
 import { roleAvatarSx, roleLabels, signedNumber, formatTime } from '../utils/format.js';
 import { ProfileMenu } from '../features/profile/ProfileMenu.jsx';
@@ -238,7 +245,8 @@ function MobileUserCard({ user, personalStats, onProfileChanged, onError, onLogo
 
 // ---- Sidebar ----
 
-function Sidebar({ activePage, capabilities, user, activeSessions, settings, personalStats, onProfileChanged, onError, onNavigate, onLogin, onLogout }) {
+function Sidebar({ activePage, capabilities, user, activeSessions, settings, personalStats, onProfileChanged, onError, onNavigate, onLogin, onLogout, themeMode, onToggleTheme }) {
+  const theme = useTheme();
   const order = settings?.sidebarOrder || navDefinitions.map((i) => i.id);
   const rank = Object.fromEntries(order.map((id, i) => [id, i]));
   const items = navDefinitions
@@ -246,9 +254,18 @@ function Sidebar({ activePage, capabilities, user, activeSessions, settings, per
     .sort((a, b) => (rank[a.id] ?? 999) - (rank[b.id] ?? 999));
 
   return (
-    <Box className="sidebar">
+    <Box className="sidebar" sx={{ bgcolor: 'background.paper' }}>
       <Box className="sidebar-brand">
-        <Typography variant="h6" color="primary.main" fontWeight={800}>
+        <Typography
+          variant="h6"
+          fontWeight={800}
+          sx={{
+            background: 'linear-gradient(135deg, #1e88d8 0%, #0d47a1 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
           ASJ英东物理社
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -290,6 +307,33 @@ function Sidebar({ activePage, capabilities, user, activeSessions, settings, per
 
       <Box sx={{ mt: 'auto' }}>
         <SidebarUsers activeSessions={activeSessions} settings={settings} user={user} />
+
+        <Box sx={{ px: 1.5, pb: 1.5 }}>
+          <Divider sx={{ mb: 1 }} />
+          <FormControl size="small" fullWidth>
+            <Select
+              value={themeMode}
+              onChange={(e) => onToggleTheme(e.target.value)}
+              renderValue={(v) => (
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                  {v === 'auto' ? <AutoIcon fontSize="small" /> : v === 'dark' ? <DarkIcon fontSize="small" /> : <LightIcon fontSize="small" />}
+                  <span>{v === 'auto' ? '自动' : v === 'dark' ? '深色' : '浅色'}</span>
+                </Stack>
+              )}
+              sx={{ fontSize: 13, '& .MuiSelect-select': { display: 'flex', alignItems: 'center', py: 0.75 } }}
+            >
+              <MenuItem value="auto">
+                <AutoIcon fontSize="small" sx={{ mr: 1 }} /> 自动
+              </MenuItem>
+              <MenuItem value="light">
+                <LightIcon fontSize="small" sx={{ mr: 1 }} /> 浅色
+              </MenuItem>
+              <MenuItem value="dark">
+                <DarkIcon fontSize="small" sx={{ mr: 1 }} /> 深色
+              </MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
       </Box>
     </Box>
   );
@@ -309,6 +353,8 @@ export function AppShell({
   onNavigate,
   onLogin,
   onLogout,
+  themeMode,
+  onToggleTheme,
   title,
   subtitle
 }) {
@@ -330,12 +376,15 @@ export function AppShell({
       }}
       onLogin={onLogin}
       onLogout={onLogout}
+      themeMode={themeMode}
+      onToggleTheme={onToggleTheme}
     />
   );
 
+  const shellTheme = useTheme();
   return (
-    <Box className="admin-shell">
-      <AppBar position="fixed" color="inherit" elevation={0} className="topbar">
+    <Box className="admin-shell" sx={{ bgcolor: 'background.default' }}>
+      <AppBar position="fixed" color="inherit" elevation={0} className="topbar" sx={{ borderColor: 'divider' }}>
         <Toolbar sx={{ gap: 2 }}>
           <IconButton className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="打开菜单">
             <MenuIcon />

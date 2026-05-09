@@ -1,8 +1,13 @@
 import { json, handleError, onRequestOptions } from '../../lib/response.js';
-import { listLedgerEntries, SHARED_POOL } from '../../lib/database.js';
+import { withOptionalAuth } from '../../lib/auth.js';
+import { assertCanView, listLedgerEntries, SHARED_POOL } from '../../lib/database.js';
 
 export async function onRequestGet(context) {
   try {
+    const ctx = {};
+    await withOptionalAuth(context.request, ctx);
+    await assertCanView(ctx.user, 'overview');
+
     const { searchParams } = new URL(context.request.url);
     const entries = await listLedgerEntries({
       accountType: 'pool',

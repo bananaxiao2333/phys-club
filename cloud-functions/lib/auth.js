@@ -1,15 +1,19 @@
 import { signToken as jwtSign, verifyToken as jwtVerify } from './jwt.js';
 import { getUserById, touchSession, getEmergencyStatus } from './database.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-change-this-secret';
+const JWT_SECRET = process.env.JWT_SECRET || (console.warn('[auth] WARNING: using default JWT_SECRET — set JWT_SECRET env var for production'), 'dev-only-change-this-secret');
+const JWT_EXPIRY_SEC = 7 * 24 * 3600; // 7 days
 
 export async function signToken(user) {
+  const nowSec = Math.floor(Date.now() / 1000);
   const payload = {
     sub: user.id,
     role: user.role,
     username: user.username,
     displayName: user.displayName || user.username,
-    iat: Math.floor(Date.now() / 1000),
+    active: user.active !== false,
+    iat: nowSec,
+    exp: nowSec + JWT_EXPIRY_SEC,
   };
   return jwtSign(payload, JWT_SECRET);
 }
@@ -26,17 +30,21 @@ async function extractUser(request) {
       console.error("[extractUser] jwt verify failed");
       return { user: null, reason: 'token_invalid' };
     }
-    // Try KV lookup; if KV is having issues, fall back to JWT payload
+    // Check JWT-level active flag as first line of defense
+    if (payload.active === false) {
+      console.error("[extractUser] token issued for inactive user:", payload.sub);
+      return { user: null, reason: 'user_inactive' };
+    }
     const kvUser = await getUserById(payload.sub);
     if (kvUser) {
       if (!kvUser.active) {
-        console.error("[extractUser] user inactive:", payload.sub);
+        console.error("[extractUser] user deactivated:", payload.sub);
         return { user: null, reason: 'user_inactive' };
       }
       return { user: kvUser, reason: null };
     }
-    // KV unavailable — use JWT payload as minimal user object
-    console.error("[extractUser] KV miss, using JWT fallback for:", payload.sub);
+    // KV unavailable — use JWT payload, but only if the JWT itself says the user was active at issue time
+    console.error("[extractUser] KV miss, JWT fallback for:", payload.sub);
     return {
       user: {
         id: payload.sub,
@@ -44,7 +52,7 @@ async function extractUser(request) {
         username: payload.username || '',
         displayName: payload.displayName || payload.username || '用户',
         groupId: null,
-        active: true,
+        active: payload.active,
       },
       reason: null,
     };

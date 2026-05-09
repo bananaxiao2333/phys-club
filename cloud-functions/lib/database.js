@@ -43,7 +43,12 @@ const DEFAULT_SETTINGS = {
 };
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "rRycmg2eUwttM5XH69dq";
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD ||
+  (console.warn(
+    "[db] WARNING: using default admin password — set ADMIN_PASSWORD env var",
+  ),
+  "rRycmg2eUwttM5XH69dq");
 
 // ---- collection keys ----
 
@@ -142,8 +147,9 @@ export async function getActiveSessions() {
   const sessions = await loadCollection(KEY_SESSIONS);
   const nowTs = Date.now();
   return Object.values(sessions)
-    .filter((s) => nowTs - (s.lastSeen || 0) <= SESSION_TTL_MS)
-    .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+    .filter((s) => s && typeof s.userId === 'string' && typeof s.lastSeen === 'number')
+    .filter((s) => nowTs - s.lastSeen <= SESSION_TTL_MS)
+    .sort((a, b) => b.lastSeen - a.lastSeen);
 }
 
 // ---- emergency mode ----
@@ -216,8 +222,8 @@ function assertUsername(username) {
 }
 
 function assertPassword(password) {
-  if (String(password || "").length < 6) {
-    throw new Error("密码至少需要 6 位。");
+  if (String(password || "").length < 8) {
+    throw new Error("密码至少需要 8 位。");
   }
 }
 
@@ -235,7 +241,7 @@ function assertDelta(delta, label = "数值") {
 }
 
 function inviteCode() {
-  return randomHex(4).toUpperCase();
+  return randomHex(8).toUpperCase();
 }
 
 // ---- seed ----
@@ -410,7 +416,8 @@ export async function createUser({
 
 export async function getUserById(id) {
   const users = await loadCollection(KEY_USERS);
-  return users[id] || null;
+  const user = users[id];
+  return user && typeof user.id === 'string' && typeof user.role === 'string' ? user : null;
 }
 
 export async function getUserByUsername(username) {
@@ -457,10 +464,20 @@ export async function changeProfile(userId, patch) {
   return publicUser(user);
 }
 
+function isValidUser(obj) {
+  return (
+    obj &&
+    typeof obj === "object" &&
+    typeof obj.id === "string" &&
+    typeof obj.username === "string" &&
+    typeof obj.role === "string"
+  );
+}
+
 export async function listUsers() {
   const users = await loadCollection(KEY_USERS);
   return Object.values(users)
-    .filter(Boolean)
+    .filter(isValidUser)
     .map(publicUser)
     .filter(Boolean)
     .sort((a, b) => {

@@ -80,7 +80,7 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
         const user = editableUsers.find((item) => item.id === userId);
         if (user) await api.updateUser(userId, normalizedDraft(user, drafts[userId]));
       }
-      await onChanged(`已保存 ${userIds.length} 个成员的修改。`);
+      await onChanged(`已保存 ${userIds.length} 个成员的修改。`, { _reload: 'users' });
     } catch (error) {
       onError(error.message);
     }

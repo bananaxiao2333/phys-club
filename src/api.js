@@ -13,6 +13,20 @@ export function setToken(nextToken) {
   }
 }
 
+// ---- global loading state ----
+
+let loadingCount = 0;
+const listeners = new Set();
+
+function notify() {
+  listeners.forEach((fn) => fn(loadingCount > 0));
+}
+
+export function onApiLoadingChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
 async function request(path, options = {}) {
   const headers = {
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -20,17 +34,25 @@ async function request(path, options = {}) {
     ...options.headers
   };
 
-  const response = await fetch(path, {
-    ...options,
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
+  loadingCount++;
+  notify();
 
-  const payload = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.message || '请求失败');
+  try {
+    const response = await fetch(path, {
+      ...options,
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+
+    const payload = response.status === 204 ? null : await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.message || '请求失败');
+    }
+    return payload;
+  } finally {
+    loadingCount--;
+    notify();
   }
-  return payload;
 }
 
 export const api = {

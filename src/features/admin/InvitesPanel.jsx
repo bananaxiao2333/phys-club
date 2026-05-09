@@ -51,7 +51,7 @@ export function InvitesPanel({ groups, invites, onChanged, onError }) {
         expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null
       });
       setForm((next) => ({ ...next, maxUses: 1, expiresAt: '' }));
-      await onChanged('邀请码已创建。');
+      await onChanged('邀请码已创建。', { _reload: 'invites' });
     } catch (error) {
       onError(error.message);
     } finally {
@@ -62,7 +62,7 @@ export function InvitesPanel({ groups, invites, onChanged, onError }) {
   async function toggleActive(code, active) {
     try {
       await api.toggleInviteActive(code, active);
-      await onChanged(active ? '邀请码已激活。' : '邀请码已停用。');
+      await onChanged(active ? '邀请码已激活。' : '邀请码已停用。', { _reload: 'invites' });
     } catch (error) {
       onError(error.message);
     }

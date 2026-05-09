@@ -1,30 +1,42 @@
 // Standard JSON response builder with CORS headers for EdgeOne cloud functions.
 
-const CORS_HEADERS = {
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Cache-Control': 'no-cache, no-store, must-revalidate'
-};
+function buildCorsHeaders(origin) {
+  const allowed = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
+  let allowOrigin = null;
+  if (!allowed.length) {
+    // Dev mode: allow localhost
+    if (origin && (origin.startsWith('http://127.0.0.1') || origin.startsWith('http://localhost'))) {
+      allowOrigin = origin;
+    }
+  } else if (allowed.includes('*')) {
+    allowOrigin = '*';
+  } else if (allowed.includes(origin)) {
+    allowOrigin = origin;
+  }
+  const headers = { 'Content-Type': 'application/json' };
+  if (allowOrigin) {
+    headers['Access-Control-Allow-Origin'] = allowOrigin;
+    headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
+    headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+  }
+  return headers;
+}
+
+function jsonHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  // In production (CORS_ORIGIN set), use the configured origin. In dev, allow localhost.
+  if (process.env.CORS_ORIGIN) {
+    h['Access-Control-Allow-Origin'] = process.env.CORS_ORIGIN;
+    h['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
+    h['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+    h['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+  }
+  return h;
+}
 
 export function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: CORS_HEADERS
-  });
-}
-
-export function jsonError(status, message) {
-  return json({ message }, status);
-}
-
-export function ok(data) {
-  return json(data, 200);
-}
-
-export function created(data) {
-  return json(data, 201);
+  return new Response(JSON.stringify(data), { status, headers: jsonHeaders() });
 }
 
 // Check if an error is a structured JSON error we should return directly.
@@ -32,23 +44,29 @@ export function isJsonError(error) {
   return error?.__jsonResponse === true;
 }
 
-// Standard error handler for route functions. Converts errors to JSON responses.
+// Standard error handler. Don't leak internal error details to clients.
 export function handleError(error) {
   if (isJsonError(error)) {
-    return json({ message: error.message }, error.status);
+    return new Response(JSON.stringify({ message: error.message }), {
+      status: error.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
   if (error.status && error.message) {
-    return json({ message: error.message }, error.status);
+    return new Response(JSON.stringify({ message: error.message }), {
+      status: error.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
   console.error(error);
-  return json({ message: error.message || '请求处理失败。' }, 400);
+  return new Response(JSON.stringify({ message: '服务器处理请求时发生错误。' }), {
+    status: 500,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
-// Handle CORS preflight requests. Cloud functions should export this
-// when the route needs to handle non-GET methods from browsers.
-export function onRequestOptions() {
-  return new Response(null, {
-    status: 204,
-    headers: CORS_HEADERS
-  });
+// Handle CORS preflight requests.
+export function onRequestOptions(context) {
+  const origin = context?.request?.headers?.get?.('Origin') || '';
+  return new Response(null, { status: 204, headers: buildCorsHeaders(origin) });
 }

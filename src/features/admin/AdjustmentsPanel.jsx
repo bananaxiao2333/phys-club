@@ -33,7 +33,7 @@ export function AdjustmentsPanel({ users, onChanged, onError }) {
         detail: memberForm.detail
       });
       setMemberForm((form) => ({ ...form, userIds: [], reason: '', detail: '' }));
-      await onChanged('批量积分调整已写入流水。');
+      await onChanged('批量积分调整已写入流水。', { _reload: 'users' });
     } catch (error) {
       onError(error.message);
     } finally {
@@ -51,7 +51,7 @@ export function AdjustmentsPanel({ users, onChanged, onError }) {
         detail: poolForm.detail
       });
       setPoolForm((form) => ({ ...form, reason: '', detail: '' }));
-      await onChanged('共享资金池调整已写入流水。');
+      await onChanged('共享资金池调整已写入流水。', { _reload: 'users' });
     } catch (error) {
       onError(error.message);
     } finally {

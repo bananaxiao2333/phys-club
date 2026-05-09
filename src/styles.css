@@ -6,18 +6,12 @@ body,
 
 body {
   margin: 0;
-  background: #f7f9fc;
   font-family: Roboto, "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
 }
 
 .admin-shell {
   min-height: 100vh;
   display: flex;
-  background: #f7f9fc;
-}
-
-.topbar {
-  border-bottom: 1px solid #dce5ef;
 }
 
 @media (min-width: 900px) {
@@ -29,7 +23,6 @@ body {
 
 .sidebar {
   height: 100%;
-  background: #fbfcfe;
 }
 
 .sidebar-brand {
