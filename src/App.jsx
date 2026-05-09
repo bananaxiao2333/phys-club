@@ -10,7 +10,7 @@ import {
   createTheme,
 } from "@mui/material";
 import { Error as ErrorIcon, PanTool as StopIcon, Refresh as RefreshIcon } from "@mui/icons-material";
-import { Component, useCallback, useEffect, useMemo, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getToken, setToken, onApiLoadingChange } from "./api.js";
 import { AppShell } from "./layout/AppShell.jsx";
 import { AuthPanel } from "./features/auth/AuthPanel.jsx";
@@ -212,25 +212,32 @@ export default function App() {
         .catch(() => setLeaderboard(null)),
     ];
 
-    if (!appPayload.user || !caps.views?.myLedger) setMyEntries([]);
-    if (!appPayload.user || !caps.views?.statistics) setStatistics(false);
+    if (!appPayload.user || !caps.views?.myLedger) { setMyEntries([]); myEntriesLoaded.current = false; }
+    else { myEntriesLoaded.current = false; setMyEntries(null); }
+    if (!appPayload.user || !caps.views?.statistics) { setStatistics(false); statsLoaded.current = false; }
+    else { statsLoaded.current = false; setStatistics(null); }
 
     await Promise.all(jobs);
   }
 
+  const myEntriesLoaded = useRef(false);
+  const statsLoaded = useRef(false);
+
   // Lazy load myLedger when user visits that page
   useEffect(() => {
-    if (activePage === 'myLedger' && myEntries === null && user && capabilities.views?.myLedger) {
+    if (activePage === 'myLedger' && !myEntriesLoaded.current && user && capabilities.views?.myLedger) {
+      myEntriesLoaded.current = true;
       api.myLedger().then(p => setMyEntries(p.entries || [])).catch(() => setMyEntries([]));
     }
-  }, [activePage, myEntries, user, capabilities]);
+  }, [activePage, user, capabilities]);
 
   // Lazy load statistics when user visits that page
   useEffect(() => {
-    if (activePage === 'statistics' && statistics === null && user && capabilities.views?.statistics) {
-      api.statistics().then(p => setStatistics(p.statistics)).catch(() => setStatistics(null));
+    if (activePage === 'statistics' && !statsLoaded.current && user && capabilities.views?.statistics) {
+      statsLoaded.current = true;
+      api.statistics().then(p => setStatistics(p.statistics || false)).catch(() => setStatistics(false));
     }
-  }, [activePage, statistics, user, capabilities]);
+  }, [activePage, user, capabilities]);
 
   useEffect(() => {
     return onApiLoadingChange(setApiLoading);
@@ -322,7 +329,7 @@ export default function App() {
     if (activePage === "myLedger")
       return <MyLedgerPage entries={myEntries || []} user={user} />;
     if (activePage === "statistics")
-      return statistics ? <StatisticsPage statistics={statistics} /> : <Box className="center-panel"><CircularProgress /></Box>;
+      return statistics !== null ? <StatisticsPage statistics={statistics || null} /> : <Box className="center-panel"><CircularProgress /></Box>;
     if (activePage === "admin") {
       return (
         <AdminPage
