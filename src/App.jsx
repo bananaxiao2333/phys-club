@@ -4,6 +4,7 @@ import {
   Button,
   CircularProgress,
   Fade,
+  LinearProgress,
   Snackbar,
   ThemeProvider,
   Typography,
@@ -388,7 +389,7 @@ export default function App() {
           >
             ASJYT PHYSICS CLUB
           </Typography>
-          <CircularProgress sx={{ mt: 3, color: "#fff" }} />
+          <LinearProgress sx={{ mt: 3, width: 260, height: 4, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.2)', '& .MuiLinearProgress-bar': { bgcolor: '#fff', borderRadius: 2 } }} />
         </Box>
       </Fade>
       <AppShell
