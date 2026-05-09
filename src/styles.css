@@ -1,0 +1,136 @@
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f7f9fc;
+  font-family: Roboto, "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.admin-shell {
+  min-height: 100vh;
+  display: flex;
+  background: #f7f9fc;
+}
+
+.topbar {
+  border-bottom: 1px solid #dce5ef;
+}
+
+@media (min-width: 900px) {
+  .topbar {
+    width: calc(100% - 248px) !important;
+    margin-left: 248px;
+  }
+}
+
+.sidebar {
+  height: 100%;
+  background: #fbfcfe;
+}
+
+.sidebar-brand {
+  height: 72px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 24px;
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+  padding: 104px 28px 36px;
+}
+
+.mobile-menu {
+  display: inline-flex;
+}
+
+.desktop-account-actions {
+  display: none;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.group-lanes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(230px, 1fr));
+  gap: 18px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.group-lane {
+  border-left: 4px solid var(--group-color);
+  padding-left: 18px;
+  min-height: 260px;
+}
+
+.group-letter {
+  font-size: 52px;
+  line-height: 1;
+  font-weight: 900;
+  color: var(--group-color);
+}
+
+.two-column {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.form-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.center-panel {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+}
+
+.ledger-mobile-row {
+  border: 1px solid #d9e5ef;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+@media (min-width: 900px) {
+  .mobile-menu {
+    display: none !important;
+  }
+
+  .desktop-account-actions {
+    display: flex;
+    align-items: center;
+  }
+}
+
+@media (max-width: 1100px) {
+  .metric-grid,
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .main-area {
+    padding: 92px 16px 28px;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
