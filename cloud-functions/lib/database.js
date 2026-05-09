@@ -10,11 +10,31 @@ export const GROUPS = [
   { id: "group_4", name: "磁陀星", alias: "MAGNETAR", color: "#7b008f" },
 ];
 
-export const SHARED_POOL = {
-  id: "shared",
-  name: "共享资金池",
+// ---- pool definitions ----
+
+export const FIXED_POOL = {
+  id: "pool_fixed",
+  name: "固定资金池",
   color: "#1565c0",
+  description: "社团公共资金，用于公共物资、活动垫付、奖励注资、维护支出",
 };
+
+export const SETTLEMENT_POOL = {
+  id: "pool_settlement",
+  name: "项目待结算池",
+  color: "#e65100",
+  description: "临时中转区，营业收入先入此池，扣除成本后利润转入固定池",
+};
+
+export const REWARD_POOL = {
+  id: "pool_reward",
+  name: "奖励池",
+  color: "#2e7d32",
+  description: "固定资金池中的锁定部分，专门用于发放社员奖励",
+};
+
+// Legacy alias for backward compatibility in ledger data
+export const SHARED_POOL = FIXED_POOL;
 
 export const VIEW_DEFINITIONS = {
   overview: { label: "总览", allowedRoles: ["public", "member", "planner"] },
@@ -40,6 +60,8 @@ const DEFAULT_SETTINGS = {
     sortBy: "lastSeen",
   },
   sidebarOrder: ["overview", "members", "myLedger", "statistics", "admin"],
+  duesSplitRatio: 30,          // % of new member dues going to fixed pool
+  wartimeGap: 0,               // amount owed to fixed pool from wartime reward fills
 };
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
@@ -61,7 +83,7 @@ const KEY_SETTINGS = "data_settings";
 const KEY_STATS = "data_stats";
 const KEY_SESSIONS = "data_sessions";
 const KEY_SIDEBAR = "data_sidebar";
-const KEY_EMERGENCY = "data_emergency";
+const KEY_MAINTENANCE = "data_maintenance";
 
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -152,14 +174,14 @@ export async function getActiveSessions() {
     .sort((a, b) => b.lastSeen - a.lastSeen);
 }
 
-// ---- emergency mode ----
+// ---- maintenance mode ----
 
-export async function getEmergencyStatus() {
-  const data = await loadCollection(KEY_EMERGENCY);
+export async function getMaintenanceStatus() {
+  const data = await loadCollection(KEY_MAINTENANCE);
   return data?.active === true;
 }
 
-export async function setEmergencyStatus(active) {
+export async function setMaintenanceStatus(active) {
   if (active) {
     // Force logout all non-admin users
     const sessions = await loadCollection(KEY_SESSIONS);
@@ -172,7 +194,7 @@ export async function setEmergencyStatus(active) {
     }
     await saveCollection(KEY_SESSIONS, sessions);
   }
-  await saveCollection(KEY_EMERGENCY, { active, updatedAt: now() });
+  await saveCollection(KEY_MAINTENANCE, { active, updatedAt: now() });
 }
 
 // ---- helpers ----
@@ -346,7 +368,15 @@ export async function updateSettings(patch) {
   if (patch.sidebarOrder) {
     sidebarOrder = patch.sidebarOrder;
   }
-  const next = { ...current, visibility, sidebarOrder, updatedAt: now() };
+  let duesSplitRatio = current.duesSplitRatio ?? DEFAULT_SETTINGS.duesSplitRatio;
+  if (patch.duesSplitRatio !== undefined) {
+    duesSplitRatio = Math.max(0, Math.min(100, Number(patch.duesSplitRatio) || 0));
+  }
+  let wartimeGap = current.wartimeGap ?? 0;
+  if (patch.wartimeGap !== undefined) {
+    wartimeGap = Math.max(0, Number(patch.wartimeGap) || 0);
+  }
+  const next = { ...current, visibility, sidebarOrder, duesSplitRatio, wartimeGap, updatedAt: now() };
   await saveCollection(KEY_SETTINGS, next);
   await saveCollection(KEY_SIDEBAR, sidebarUsers);
   console.log(
@@ -750,6 +780,200 @@ export async function addSharedPoolAdjustment({
   });
 }
 
+// ---- new 功勋 operations (casting / destruction / transfer) ----
+
+async function createMeritOperation({ type, reason, detail = "", operatorId, entries, metadata = {} }) {
+  const cleanReason = String(reason || "").trim();
+  if (!cleanReason) throw new Error("请填写原因。");
+  if (!Array.isArray(entries) || entries.length < 2) throw new Error("分录至少需要两条。");
+  const sum = entries.reduce((t, e) => t + Number(e.delta || 0), 0);
+  if (sum !== 0) throw new Error("分录未平账。");
+
+  const createdAt = now();
+  const operation = {
+    id: makeId("op"),
+    type,
+    reason: cleanReason.slice(0, 120),
+    detail: String(detail || "").trim().slice(0, 500),
+    operatorId,
+    metadata,
+    createdAt,
+  };
+
+  const records = entries.map((entry) => ({
+    id: makeId("ledger"),
+    operationId: operation.id,
+    type,
+    accountType: entry.accountType,
+    accountId: entry.accountId,
+    userId: entry.userId || null,
+    groupId: entry.groupId || null,
+    poolId: entry.poolId || null,
+    delta: Number(entry.delta),
+    reason: operation.reason,
+    detail: operation.detail,
+    operatorId,
+    createdAt,
+  }));
+
+  const ledger = await loadCollection(KEY_LEDGER);
+  const operations = await loadCollection(KEY_OPERATIONS);
+  operations[operation.id] = operation;
+  for (const r of records) ledger[r.id] = r;
+  await saveCollection(KEY_LEDGER, ledger);
+  await saveCollection(KEY_OPERATIONS, operations);
+  return enrichLedgerEntries(records);
+}
+
+// 铸造：真实资金进入系统，功勋增加
+export async function castMerit({ amount, poolId, reason, detail = "", operatorId }) {
+  const amt = Math.abs(assertDelta(amount, "铸造金额"));
+  return createMeritOperation({
+    type: "casting",
+    reason, detail, operatorId,
+    metadata: { poolId, amount: amt },
+    entries: [
+      { accountType: "pool", accountId: poolId, poolId, delta: amt },
+      { accountType: "external", accountId: "external", delta: -amt },
+    ],
+  });
+}
+
+// 销毁：真实资金离开系统，功勋消灭
+export async function destroyMerit({ amount, poolId, reason, detail = "", operatorId }) {
+  const amt = Math.abs(assertDelta(amount, "销毁金额"));
+  return createMeritOperation({
+    type: "destruction",
+    reason, detail, operatorId,
+    metadata: { poolId, amount: amt },
+    entries: [
+      { accountType: "pool", accountId: poolId, poolId, delta: -amt },
+      { accountType: "external", accountId: "external", delta: amt },
+    ],
+  });
+}
+
+// 转账：池子之间的功勋转移
+export async function transferMerit({ fromPoolId, toPoolId, amount, reason, detail = "", operatorId }) {
+  const amt = Math.abs(assertDelta(amount, "转账金额"));
+  return createMeritOperation({
+    type: "transfer",
+    reason, detail, operatorId,
+    metadata: { fromPoolId, toPoolId, amount: amt },
+    entries: [
+      { accountType: "pool", accountId: fromPoolId, poolId: fromPoolId, delta: -amt },
+      { accountType: "pool", accountId: toPoolId, poolId: toPoolId, delta: amt },
+    ],
+  });
+}
+
+// 社费拆分：新社员缴费，按比例分配固定池和个人账户
+export async function allocateDues({ userId, amount, operatorId }) {
+  const user = await getUserById(userId);
+  if (!user) throw new Error("社员不存在。");
+  const amt = Math.abs(assertDelta(amount, "社费金额"));
+  const settings = await getSettings();
+  const ratio = (settings.duesSplitRatio || 30) / 100;
+  const toFixed = Math.round(amt * ratio);
+  const toMember = amt - toFixed;
+
+  return createMeritOperation({
+    type: "dues_split",
+    reason: `社费拆分（${settings.duesSplitRatio || 30}%归公）`,
+    detail: `${amt} 功勋铸造 → 固定池 ${toFixed} + 个人 ${toMember}`,
+    operatorId,
+    metadata: { userId, amount: amt, splitRatio: settings.duesSplitRatio || 30, toFixed, toMember },
+    entries: [
+      { accountType: "pool", accountId: FIXED_POOL.id, poolId: FIXED_POOL.id, delta: toFixed },
+      { accountType: "member", accountId: userId, userId, groupId: user.groupId, delta: toMember },
+      { accountType: "external", accountId: "external", delta: -amt },
+    ],
+  });
+}
+
+// 项目结算：待结算池 → 付成本（销毁）→ 利润转固定池
+export async function settleProject({ revenue, cost, reason, detail = "", operatorId }) {
+  const rev = Math.abs(assertDelta(revenue, "项目收入"));
+  const cst = Math.abs(assertDelta(cost, "项目成本"));
+  if (cst > rev) throw new Error("成本不能超过收入。");
+  const profit = rev - cst;
+
+  return createMeritOperation({
+    type: "project_settle",
+    reason,
+    detail: `${detail} — 收入 ${rev}，成本 ${cst}，利润 ${profit}`.slice(0, 500),
+    operatorId,
+    metadata: { revenue: rev, cost: cst, profit },
+    entries: [
+      { accountType: "pool", accountId: SETTLEMENT_POOL.id, poolId: SETTLEMENT_POOL.id, delta: -(rev - cst) },
+      ...(cst > 0 ? [{ accountType: "external", accountId: "external", delta: cst }] : []),
+      ...(profit > 0 ? [{ accountType: "pool", accountId: FIXED_POOL.id, poolId: FIXED_POOL.id, delta: profit }] : []),
+    ],
+  });
+}
+
+// 填充奖励池：从固定池划拨到奖励池
+export async function fillRewardPool({ amount, reason, detail = "", operatorId }) {
+  const amt = Math.abs(assertDelta(amount, "奖励池填充金额"));
+  return createMeritOperation({
+    type: "reward_fill",
+    reason, detail, operatorId,
+    metadata: { amount: amt },
+    entries: [
+      { accountType: "pool", accountId: FIXED_POOL.id, poolId: FIXED_POOL.id, delta: -amt },
+      { accountType: "pool", accountId: REWARD_POOL.id, poolId: REWARD_POOL.id, delta: amt },
+    ],
+  });
+}
+
+// 发放奖励：从奖励池发给社员
+export async function distributeReward({ userId, amount, reason, detail = "", operatorId }) {
+  const user = await getUserById(userId);
+  if (!user) throw new Error("社员不存在。");
+  const amt = Math.abs(assertDelta(amount, "奖励金额"));
+  return createMeritOperation({
+    type: "reward_distribute",
+    reason, detail, operatorId,
+    metadata: { userId, amount: amt },
+    entries: [
+      { accountType: "pool", accountId: REWARD_POOL.id, poolId: REWARD_POOL.id, delta: -amt },
+      { accountType: "member", accountId: userId, userId, groupId: user.groupId, delta: amt },
+    ],
+  });
+}
+
+// 注销退款：销毁个人功勋，取消激活账户
+export async function refundAndDeactivate({ userId, operatorId }) {
+  const users = await loadCollection(KEY_USERS);
+  const user = users[userId];
+  if (!user) throw new Error("社员不存在。");
+  if (!user.active) throw new Error("该社员已被注销。");
+  if (!["member", "planner"].includes(user.role)) throw new Error("仅社员可注销退款。");
+
+  // Calculate total balance
+  const allEntries = await listLedgerEntries({ accountType: "member", accountId: userId, limit: 1000 });
+  const balance = allEntries.reduce((sum, e) => sum + e.delta, 0);
+  if (balance <= 0) throw new Error("账户余额为零或负，无需退款。");
+
+  const entries = await createMeritOperation({
+    type: "refund",
+    reason: "社员注销全额退款",
+    detail: `${user.displayName}（${user.username}）注销，退款 ${balance} 功勋`,
+    operatorId,
+    metadata: { userId, refundAmount: balance },
+    entries: [
+      { accountType: "member", accountId: userId, userId, groupId: user.groupId, delta: -balance },
+      { accountType: "external", accountId: "external", delta: balance },
+    ],
+  });
+
+  user.active = false;
+  user.updatedAt = now();
+  await saveCollection(KEY_USERS, users);
+
+  return { entries, user: publicUser(user), refundAmount: balance };
+}
+
 export async function listLedgerEntries({
   limit = 500,
   accountType,
@@ -827,14 +1051,18 @@ export async function getLeaderboard() {
     };
   });
 
-  const poolEntries = await listLedgerEntries({
-    accountType: "pool",
-    accountId: SHARED_POOL.id,
-    limit: 1000,
-  });
-  const poolTotal = poolEntries.reduce((s, e) => s + e.delta, 0);
+  const poolEntries = await listLedgerEntries({ accountType: "pool", limit: 1000 });
+  const fixedTotal = poolEntries.filter(e => e.poolId === FIXED_POOL.id).reduce((s, e) => s + e.delta, 0);
+  const settlementTotal = poolEntries.filter(e => e.poolId === SETTLEMENT_POOL.id).reduce((s, e) => s + e.delta, 0);
+  const rewardTotal = poolEntries.filter(e => e.poolId === REWARD_POOL.id).reduce((s, e) => s + e.delta, 0);
 
-  return { groups, members, sharedPool: { ...SHARED_POOL, total: poolTotal } };
+  return {
+    groups, members,
+    fixedPool: { ...FIXED_POOL, total: fixedTotal },
+    settlementPool: { ...SETTLEMENT_POOL, total: settlementTotal },
+    rewardPool: { ...REWARD_POOL, total: rewardTotal },
+    sharedPool: { ...SHARED_POOL, total: fixedTotal },
+  };
 }
 
 // ---- statistics ----

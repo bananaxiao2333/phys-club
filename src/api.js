@@ -78,6 +78,15 @@ export const api = {
   adjustSharedPool: (body) => request('/api/admin/ledger/pool-adjust', { method: 'POST', body }),
   recalculateStatistics: () => request('/api/admin/statistics/recalculate', { method: 'POST' }),
   updateUser: (id, body) => request(`/api/admin/users/${id}`, { method: 'PATCH', body }),
-  getEmergencyStatus: () => request('/api/admin/emergency'),
-  setEmergencyStatus: (active) => request('/api/admin/emergency', { method: 'POST', body: { active } }),
+  getMaintenanceStatus: () => request('/api/admin/maintenance'),
+  setMaintenanceStatus: (active) => request('/api/admin/maintenance', { method: 'POST', body: { active } }),
+  // 功勋操作
+  castMerit: (body) => request('/api/admin/ledger/cast', { method: 'POST', body }),
+  destroyMerit: (body) => request('/api/admin/ledger/destroy', { method: 'POST', body }),
+  transferMerit: (body) => request('/api/admin/ledger/transfer', { method: 'POST', body }),
+  allocateDues: (body) => request('/api/admin/dues', { method: 'POST', body }),
+  settleProject: (body) => request('/api/admin/settlement', { method: 'POST', body }),
+  fillReward: (body) => request('/api/admin/reward/fill', { method: 'POST', body }),
+  distributeReward: (body) => request('/api/admin/reward/distribute', { method: 'POST', body }),
+  refundMember: (body) => request('/api/admin/refund', { method: 'POST', body }),
 };

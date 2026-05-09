@@ -347,7 +347,7 @@ export function AppShell({
   personalStats,
   activeSessions,
   settings,
-  emergency,
+  maintenance,
   onProfileChanged,
   onError,
   onNavigate,
@@ -417,7 +417,7 @@ export function AppShell({
         </Toolbar>
       </AppBar>
 
-      {emergency && (
+      {maintenance && (
         <Box
           sx={{
             position: 'fixed',
@@ -439,11 +439,11 @@ export function AppShell({
             },
           }}
         >
-          应急锁定已激活 — 仅管理员可访问系统
+          维护模式已激活 — 仅管理员可访问系统
         </Box>
       )}
 
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 }, mt: emergency ? '36px' : 0 }}>
+      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 }, mt: maintenance ? '36px' : 0 }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -465,7 +465,7 @@ export function AppShell({
       <Box
         component="main"
         className="main-area"
-        sx={emergency ? {
+        sx={maintenance ? {
           background: 'repeating-linear-gradient(-45deg, #ffeb3b, #ffeb3b 20px, #212121 20px, #212121 40px) fixed',
           '& > *': { bgcolor: 'background.default', borderRadius: 1 },
         } : undefined}

@@ -1,5 +1,5 @@
 import { signToken as jwtSign, verifyToken as jwtVerify } from './jwt.js';
-import { getUserById, touchSession, getEmergencyStatus } from './database.js';
+import { getUserById, touchSession, getMaintenanceStatus } from './database.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || (console.warn('[auth] WARNING: using default JWT_SECRET — set JWT_SECRET env var for production'), 'dev-only-change-this-secret');
 const JWT_EXPIRY_SEC = 7 * 24 * 3600; // 7 days
@@ -62,13 +62,13 @@ async function extractUser(request) {
   }
 }
 
-async function blockIfEmergency(request, ctx) {
-  if (!await getEmergencyStatus()) return;
+async function blockIfMaintenance(request, ctx) {
+  if (!await getMaintenanceStatus()) return;
   // Always allow: login, app bootstrap, and admin routes
   const url = new URL(request.url);
   if (url.pathname === '/api/auth/login' || url.pathname === '/api/app' || url.pathname.startsWith('/api/admin/')) return;
   if (!ctx.user || ctx.user.role !== 'admin') {
-    throw throwJson(503, '系统处于应急锁定状态，仅管理员可访问。');
+    throw throwJson(503, '系统处于维护模式，仅管理员可访问。');
   }
 }
 
@@ -76,7 +76,7 @@ async function blockIfEmergency(request, ctx) {
 export async function withOptionalAuth(request, ctx) {
   const { user } = await extractUser(request);
   ctx.user = user || null;
-  await blockIfEmergency(request, ctx);
+  await blockIfMaintenance(request, ctx);
   if (ctx.user) {
     try { await touchSession(ctx.user); } catch { /* session tracking is non-critical */ }
   }
@@ -92,7 +92,7 @@ export async function requireAuth(request, ctx) {
     throw throwJson(401, '请先登录。');
   }
   ctx.user = user;
-  await blockIfEmergency(request, ctx);
+  await blockIfMaintenance(request, ctx);
   try { await touchSession(ctx.user); } catch { /* session tracking is non-critical */ }
 }
 

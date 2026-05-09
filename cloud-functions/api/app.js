@@ -4,7 +4,7 @@ import {
   getSettings,
   getViewerCapabilities,
   getActiveSessions,
-  getEmergencyStatus,
+  getMaintenanceStatus,
   GROUPS,
   SHARED_POOL,
   VIEW_DEFINITIONS,
@@ -31,7 +31,7 @@ export async function onRequestGet(context) {
       settings,
       capabilities: getViewerCapabilities(ctx.user, settings),
       activeSessions: await getActiveSessions(),
-      emergency: await getEmergencyStatus(),
+      maintenance: await getMaintenanceStatus(),
     });
   } catch (error) {
     return handleError(error);

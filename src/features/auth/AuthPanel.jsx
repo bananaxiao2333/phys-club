@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { api } from '../../api.js';
 import { Surface } from '../../components/Surface.jsx';
 
-export function AuthPanel({ onAuthed, emergency }) {
+export function AuthPanel({ onAuthed, maintenance }) {
   const [tab, setTab] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -51,8 +51,8 @@ export function AuthPanel({ onAuthed, emergency }) {
           </Typography>
           <Typography color="text.secondary">社员登录后只能看到自己的积分明细和授权内容。</Typography>
         </Box>
-        {emergency ? (
-          <Alert severity="warning" sx={{ fontWeight: 700 }}>系统处于应急锁定状态，暂不开放注册。</Alert>
+        {maintenance ? (
+          <Alert severity="warning" sx={{ fontWeight: 700 }}>系统处于维护锁定状态，暂不开放注册。</Alert>
         ) : (
           <Tabs value={tab} onChange={(_, value) => setTab(value)}>
             <Tab icon={<LoginIcon />} iconPosition="start" label="登录" />
@@ -61,7 +61,7 @@ export function AuthPanel({ onAuthed, emergency }) {
         )}
         <Divider />
         {error ? <Alert severity="error">{error}</Alert> : null}
-        {tab === 0 || emergency ? (
+        {tab === 0 || maintenance ? (
           <Stack component="form" spacing={2} onSubmit={submitLogin}>
             <TextField
               label="用户名"

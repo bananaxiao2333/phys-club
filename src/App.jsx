@@ -318,7 +318,7 @@ export default function App() {
       return (
         <AuthPanel
           onAuthed={handleAuthed}
-          emergency={appState?.emergency || false}
+          maintenance={appState?.maintenance || false}
         />
       );
     if (activePage === "overview")
@@ -330,7 +330,7 @@ export default function App() {
     if (activePage === "myLedger")
       return <MyLedgerPage entries={myEntries || []} user={user} />;
     if (activePage === "statistics")
-      return statistics !== null ? <StatisticsPage statistics={statistics || null} /> : <Box className="center-panel"><CircularProgress /></Box>;
+      return statistics !== null ? <StatisticsPage statistics={statistics || null} isAdmin={user?.role === 'admin'} onStatChanged={setStatistics} /> : <Box className="center-panel"><CircularProgress /></Box>;
     if (activePage === "admin") {
       return (
         <AdminPage
@@ -399,7 +399,7 @@ export default function App() {
         personalStats={personalStats}
         activeSessions={appState?.activeSessions}
         settings={appState?.settings}
-        emergency={appState?.emergency || false}
+        maintenance={appState?.maintenance || false}
         themeMode={themeMode}
         onToggleTheme={setTheme}
         onProfileChanged={handleChanged}

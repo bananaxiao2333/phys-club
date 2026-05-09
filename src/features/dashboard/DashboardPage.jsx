@@ -24,7 +24,9 @@ function totalMemberPoints(members) {
 export function DashboardPage({ leaderboard }) {
   const groups = leaderboard?.groups || [];
   const members = leaderboard?.members || [];
-  const sharedPool = leaderboard?.sharedPool;
+  const fixedPool = leaderboard?.fixedPool;
+  const settlementPool = leaderboard?.settlementPool;
+  const rewardPool = leaderboard?.rewardPool;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(8);
 
@@ -42,7 +44,7 @@ export function DashboardPage({ leaderboard }) {
         <Typography variant="h4" color="primary.main" fontWeight={800}>
           总览
         </Typography>
-        <Typography color="text.secondary">查看各小组、共享资金池和社员积分概况。</Typography>
+        <Typography color="text.secondary">查看各小组、资金池和社员功勋概况。</Typography>
       </Box>
 
       <Box className="metric-grid">
@@ -51,16 +53,16 @@ export function DashboardPage({ leaderboard }) {
           <Typography variant="h4" color="primary.main">{members.length}人</Typography>
         </Surface>
         <Surface sx={{ p: 2 }}>
-          <Typography color="text.secondary">社员总积分</Typography>
-          <Typography variant="h4" color="primary.main">{totalPoints}</Typography>
+          <Typography color="text.secondary">固定资金池</Typography>
+          <Typography variant="h4" color="primary.main">{fixedPool?.total || 0}</Typography>
         </Surface>
         <Surface sx={{ p: 2 }}>
-          <Typography color="text.secondary">共享资金池</Typography>
-          <Typography variant="h4" color="primary.main">{sharedPool?.total || 0}</Typography>
+          <Typography color="text.secondary">待结算池</Typography>
+          <Typography variant="h4" color="primary.main">{settlementPool?.total || 0}</Typography>
         </Surface>
         <Surface sx={{ p: 2 }}>
-          <Typography color="text.secondary">平均积分</Typography>
-          <Typography variant="h4" color="primary.main">{average}</Typography>
+          <Typography color="text.secondary">奖励池</Typography>
+          <Typography variant="h4" color="primary.main">{rewardPool?.total || 0}</Typography>
         </Surface>
       </Box>
 
