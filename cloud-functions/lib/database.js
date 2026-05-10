@@ -36,6 +36,59 @@ export const REWARD_POOL = {
 // Legacy alias for backward compatibility in ledger data
 export const SHARED_POOL = FIXED_POOL;
 
+// ---- dynamic groups ----
+
+export async function loadGroups() {
+  const saved = await loadCollection(KEY_GROUPS);
+  const entries = Object.values(saved).filter(g => g && g.id);
+  return entries.length ? entries.sort((a, b) => (a.order ?? 99) - (b.order ?? 99)) : DEFAULT_GROUPS;
+}
+
+export async function createGroup({ name, alias, color, order }) {
+  const groups = await loadCollection(KEY_GROUPS);
+  const id = makeId("group");
+  const group = { id, name: String(name).trim().slice(0, 16), alias: String(alias || '').trim().toUpperCase().slice(0, 20), color: String(color || '#666').trim(), order: Number(order) || Object.keys(groups).length, createdAt: now() };
+  if (!group.name) throw new Error("组名不能为空。");
+  groups[id] = group;
+  await saveCollection(KEY_GROUPS, groups);
+  return group;
+}
+
+export async function updateGroup(id, patch) {
+  const groups = await loadCollection(KEY_GROUPS);
+  const group = groups[id];
+  if (!group) throw new Error("组不存在。");
+  if (patch.name !== undefined) group.name = String(patch.name).trim().slice(0, 16);
+  if (patch.alias !== undefined) group.alias = String(patch.alias).trim().toUpperCase().slice(0, 20);
+  if (patch.color !== undefined) group.color = String(patch.color).trim();
+  if (patch.order !== undefined) group.order = Number(patch.order);
+  group.updatedAt = now();
+  await saveCollection(KEY_GROUPS, groups);
+  return group;
+}
+
+export async function deleteGroup(id) {
+  const groups = await loadCollection(KEY_GROUPS);
+  if (!groups[id]) throw new Error("组不存在。");
+  // Reassign members to no group
+  const users = await loadCollection(KEY_USERS);
+  for (const user of Object.values(users)) {
+    if (user.groupId === id && ['member', 'planner'].includes(user.role)) {
+      user.groupId = null;
+      user.updatedAt = now();
+    }
+  }
+  await saveCollection(KEY_USERS, users);
+  delete groups[id];
+  await saveCollection(KEY_GROUPS, groups);
+  return { deleted: id };
+}
+
+export async function getGroupById(id) {
+  const groups = await loadCollection(KEY_GROUPS);
+  return groups[id] || DEFAULT_GROUPS.find(g => g.id === id) || null;
+}
+
 export const VIEW_DEFINITIONS = {
   overview: { label: "总览", allowedRoles: ["public", "member", "planner"] },
   members: { label: "成员", allowedRoles: ["public", "member", "planner"] },
@@ -84,8 +137,16 @@ const KEY_STATS = "data_stats";
 const KEY_SESSIONS = "data_sessions";
 const KEY_SIDEBAR = "data_sidebar";
 const KEY_MAINTENANCE = "data_maintenance";
+const KEY_GROUPS = "data_groups";
 
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+const DEFAULT_GROUPS = [
+  { id: "group_1", name: "奇点", alias: "SINGULARITY", color: "#b00020" },
+  { id: "group_2", name: "星云", alias: "NEBULA", color: "#3526a7" },
+  { id: "group_3", name: "脉冲星", alias: "PULSAR", color: "#8a7b00" },
+  { id: "group_4", name: "磁陀星", alias: "MAGNETAR", color: "#7b008f" },
+];
 
 // ---- KV helpers with base64 encoding ----
 // The local KV emulator's RESP transport corrupts raw JSON strings
@@ -209,8 +270,10 @@ function normalizeUsername(username) {
     .toLowerCase();
 }
 
-function isValidGroup(groupId) {
-  return GROUPS.some((g) => g.id === groupId);
+async function isValidGroup(groupId) {
+  if (!groupId) return true;
+  const groups = await loadGroups();
+  return groups.some((g) => g.id === groupId);
 }
 
 function publicUser(user) {
@@ -307,6 +370,13 @@ export async function seedDefaultData() {
       admin.updatedAt = now();
       await saveCollection(KEY_USERS, users);
     }
+  }
+
+  // Seed default groups if not present
+  const groups = await loadCollection(KEY_GROUPS);
+  if (!Object.values(groups).filter(g => g && g.id).length) {
+    for (const g of DEFAULT_GROUPS) groups[g.id] = g;
+    await saveCollection(KEY_GROUPS, groups);
   }
 
   settings.updatedAt = now();
@@ -552,6 +622,34 @@ export async function updateUser(userId, patch) {
   }
   if (patch.active !== undefined) user.active = Boolean(patch.active);
 
+  user.updatedAt = now();
+  await saveCollection(KEY_USERS, users);
+  return publicUser(user);
+}
+
+// ---- batch user operations ----
+
+export async function batchUpdateGroup({ userIds, groupId, operatorId }) {
+  if (!Array.isArray(userIds) || !userIds.length) throw new Error("请选择至少一个用户。");
+  const users = await loadCollection(KEY_USERS);
+  const results = [];
+  for (const uid of userIds) {
+    const user = users[uid];
+    if (!user) continue;
+    user.groupId = groupId || null;
+    user.updatedAt = now();
+    results.push(publicUser(user));
+  }
+  await saveCollection(KEY_USERS, users);
+  return results;
+}
+
+export async function forcePassword({ userId, newPassword }) {
+  const users = await loadCollection(KEY_USERS);
+  const user = users[userId];
+  if (!user) throw new Error("用户不存在。");
+  assertPassword(newPassword);
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
   user.updatedAt = now();
   await saveCollection(KEY_USERS, users);
   return publicUser(user);

@@ -1,26 +1,9 @@
 import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  MenuItem,
-  Select,
-  Stack,
-  Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography
+  Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
+  FormControl, InputLabel, MenuItem, Select, Stack, Switch, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, Typography
 } from '@mui/material';
-import { Save as SaveIcon } from '@mui/icons-material';
+import { LockReset as PasswordIcon, Save as SaveIcon } from '@mui/icons-material';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
 import { Surface } from '../../components/Surface.jsx';
@@ -55,6 +38,11 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
   const editableUsers = users;
   const [drafts, setDrafts] = useState({});
   const [pendingPromotion, setPendingPromotion] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [batchGroupId, setBatchGroupId] = useState('');
+  const [passwordTarget, setPasswordTarget] = useState(null);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [busyBatch, setBusyBatch] = useState(false);
 
   useEffect(() => {
     setDrafts(
@@ -99,7 +87,46 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
     await executeSaveAll(dirtyUserIds);
   }
 
+  async function batchGroupChange() {
+    if (!batchGroupId || selected.size === 0) return;
+    setBusyBatch(true);
+    try {
+      await api.batchUpdateGroup({ userIds: [...selected], groupId: batchGroupId });
+      setSelected(new Set());
+      setBatchGroupId('');
+      await onChanged(`已将 ${selected.size} 名成员移至目标组。`, { _reload: 'users' });
+    } catch (e) { onError(e.message); }
+    finally { setBusyBatch(false); }
+  }
+
+  async function forcePasswordSubmit() {
+    if (!passwordTarget || passwordForm.newPassword !== passwordForm.confirmPassword) return onError('两次密码不一致。');
+    setBusyBatch(true);
+    try {
+      await api.forcePassword({ userId: passwordTarget.id, newPassword: passwordForm.newPassword });
+      setPasswordTarget(null);
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
+      await onChanged(`已强制修改 ${passwordTarget.displayName} 的密码。`);
+    } catch (e) { onError(e.message); }
+    finally { setBusyBatch(false); }
+  }
+
   return (
+    <Stack spacing={2}>
+      {selected.size > 0 && (
+        <Surface sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <Chip label={`已选 ${selected.size} 人`} onDelete={() => setSelected(new Set())} />
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>目标组</InputLabel>
+            <Select label="目标组" value={batchGroupId} onChange={e => setBatchGroupId(e.target.value)}>
+              <MenuItem value="">— 无组 —</MenuItem>
+              {groups.map(g => <MenuItem value={g.id} key={g.id}>{g.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button variant="contained" size="small" onClick={batchGroupChange} disabled={!batchGroupId || busyBatch}>批量改组</Button>
+        </Surface>
+      )}
+    <Stack spacing={2} sx={{ mt: selected.size > 0 ? 0 : 2 }}>
     <Surface sx={{ p: 0, overflow: 'hidden' }}>
       <Stack sx={{ px: 2, py: 1.5 }}>
         <Typography variant="h6" fontWeight={800}>成员管理</Typography>

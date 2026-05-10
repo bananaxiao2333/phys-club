@@ -5,7 +5,7 @@ import {
   getViewerCapabilities,
   getActiveSessions,
   getMaintenanceStatus,
-  GROUPS,
+  loadGroups,
   SHARED_POOL,
   VIEW_DEFINITIONS,
   seedDefaultData,
@@ -25,7 +25,7 @@ export async function onRequestGet(context) {
 
     return json({
       user,
-      groups: GROUPS,
+      groups: await loadGroups(),
       sharedPool: SHARED_POOL,
       viewDefinitions: VIEW_DEFINITIONS,
       settings,
