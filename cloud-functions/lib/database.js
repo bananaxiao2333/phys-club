@@ -114,7 +114,8 @@ const DEFAULT_SETTINGS = {
   },
   sidebarOrder: ["overview", "members", "myLedger", "statistics", "admin"],
   duesSplitRatio: 30,          // % of new member dues going to fixed pool
-  wartimeGap: 0,               // amount owed to fixed pool from wartime reward fills
+  wartimeGap: 0,
+  customRoles: [],
 };
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
@@ -292,10 +293,17 @@ function viewerRole(user) {
 export function canView(user, viewId, settings) {
   const role = viewerRole(user);
   if (role === "admin") return true;
-  const required = settings.visibility?.[viewId] || "admin";
-  if (required === "public") return true;
-  if (!user) return false;
-  return ROLE_RANK[role] >= ROLE_RANK[required];
+  const vis = settings.visibility?.[viewId];
+  if (!vis) return false;
+  // New per-role boolean format: { public: true, member: true, ... }
+  if (typeof vis === 'object' && !Array.isArray(vis)) return vis[role] === true;
+  // Old string format: 'member' = minimum role
+  if (typeof vis === 'string') {
+    if (vis === 'public') return true;
+    if (!user) return false;
+    return ROLE_RANK[role] >= ROLE_RANK[vis];
+  }
+  return false;
 }
 
 // ---- validation ----
@@ -392,36 +400,45 @@ export async function getSettings() {
     ...DEFAULT_SETTINGS.visibility,
     ...(saved?.visibility || {}),
   };
+  // Validate old string-format values; new per-role objects pass through as-is
   for (const viewId of Object.keys(mergedVisibility)) {
+    const val = mergedVisibility[viewId];
+    if (typeof val !== 'string') continue; // new per-role format, skip validation
     const def = VIEW_DEFINITIONS[viewId];
-    if (
-      def?.allowedRoles &&
-      !def.allowedRoles.includes(mergedVisibility[viewId])
-    ) {
-      mergedVisibility[viewId] =
-        DEFAULT_SETTINGS.visibility[viewId] || def.allowedRoles[0];
+    if (def?.allowedRoles && !def.allowedRoles.includes(val)) {
+      mergedVisibility[viewId] = DEFAULT_SETTINGS.visibility[viewId] || def.allowedRoles[0];
     }
   }
   return {
-    ...DEFAULT_SETTINGS,
-    ...(saved || {}),
+    updatedAt: saved?.updatedAt || null,
     visibility: mergedVisibility,
-    sidebarUsers: {
-      ...DEFAULT_SETTINGS.sidebarUsers,
-      ...(sidebarSaved || {}),
-    },
+    sidebarUsers: { ...DEFAULT_SETTINGS.sidebarUsers, ...(sidebarSaved || {}) },
+    sidebarOrder: saved?.sidebarOrder || DEFAULT_SETTINGS.sidebarOrder,
+    duesSplitRatio: saved?.duesSplitRatio ?? DEFAULT_SETTINGS.duesSplitRatio,
+    wartimeGap: saved?.wartimeGap ?? 0,
+    customRoles: saved?.customRoles || DEFAULT_SETTINGS.customRoles,
   };
 }
 
 export async function updateSettings(patch) {
   console.log("[updateSettings] patch:", JSON.stringify(patch));
   const current = await getSettings();
-  const visibility = { ...current.visibility };
-  for (const [viewId, role] of Object.entries(patch.visibility || {})) {
-    const def = VIEW_DEFINITIONS[viewId];
-    if (!def || !ROLE_RANK.hasOwnProperty(role)) continue;
-    if (def.allowedRoles && !def.allowedRoles.includes(role)) continue;
-    visibility[viewId] = role;
+  let visibility = { ...current.visibility };
+  // Handle both new per-role format { viewId: { role: bool } } and old string format { viewId: 'member' }
+  if (patch.visibility) {
+    const firstVal = Object.values(patch.visibility)[0];
+    if (firstVal && typeof firstVal === 'object' && !Array.isArray(firstVal)) {
+      // New per-role boolean format — use directly
+      visibility = patch.visibility;
+    } else {
+      // Old string format
+      for (const [viewId, role] of Object.entries(patch.visibility)) {
+        const def = VIEW_DEFINITIONS[viewId];
+        if (!def || !ROLE_RANK.hasOwnProperty(role)) continue;
+        if (def.allowedRoles && !def.allowedRoles.includes(role)) continue;
+        visibility[viewId] = role;
+      }
+    }
   }
   let sidebarUsers = { ...current.sidebarUsers };
   if (patch.sidebarUsers) {
@@ -443,10 +460,10 @@ export async function updateSettings(patch) {
     duesSplitRatio = Math.max(0, Math.min(100, Number(patch.duesSplitRatio) || 0));
   }
   let wartimeGap = current.wartimeGap ?? 0;
-  if (patch.wartimeGap !== undefined) {
-    wartimeGap = Math.max(0, Number(patch.wartimeGap) || 0);
-  }
-  const next = { ...current, visibility, sidebarOrder, duesSplitRatio, wartimeGap, updatedAt: now() };
+  if (patch.wartimeGap !== undefined) { wartimeGap = Math.max(0, Number(patch.wartimeGap) || 0); }
+  let customRoles = current.customRoles || [];
+  if (patch.customRoles !== undefined) { customRoles = patch.customRoles; }
+  const next = { ...current, visibility, sidebarOrder, duesSplitRatio, wartimeGap, customRoles, updatedAt: now() };
   await saveCollection(KEY_SETTINGS, next);
   await saveCollection(KEY_SIDEBAR, sidebarUsers);
   console.log(
@@ -1092,8 +1109,9 @@ export async function listLedgerEntries({
 
 export async function enrichLedgerEntries(entries) {
   const users = await listUsers();
+  const groups = await loadGroups();
   const userMap = new Map(users.map((u) => [u.id, u]));
-  const groupMap = new Map(GROUPS.map((g) => [g.id, g]));
+  const groupMap = new Map(groups.map((g) => [g.id, g]));
   const opMap = new Map(users.map((u) => [u.id, u.displayName]));
 
   return entries.map((entry) => ({
@@ -1127,11 +1145,12 @@ export async function getLeaderboard() {
   for (const e of entries)
     totals.set(e.accountId, (totals.get(e.accountId) || 0) + e.delta);
 
+  const groups = await loadGroups();
   const members = users
     .filter((u) => ["member", "planner"].includes(u.role))
     .map((u) => ({
       ...u,
-      groupName: GROUPS.find((g) => g.id === u.groupId)?.name || "未分组",
+      groupName: groups.find((g) => g.id === u.groupId)?.name || "未分组",
       total: totals.get(u.id) || 0,
     }))
     .sort(
@@ -1140,7 +1159,7 @@ export async function getLeaderboard() {
         (a.displayName || "").localeCompare(b.displayName || "", "zh-CN"),
     );
 
-  const groups = GROUPS.map((group) => {
+  const grouped = groups.map((group) => {
     const gm = members.filter((m) => m.groupId === group.id);
     return {
       ...group,
@@ -1155,7 +1174,7 @@ export async function getLeaderboard() {
   const rewardTotal = poolEntries.filter(e => e.poolId === REWARD_POOL.id).reduce((s, e) => s + e.delta, 0);
 
   return {
-    groups, members,
+    groups: grouped, members,
     fixedPool: { ...FIXED_POOL, total: fixedTotal },
     settlementPool: { ...SETTLEMENT_POOL, total: settlementTotal },
     rewardPool: { ...REWARD_POOL, total: rewardTotal },

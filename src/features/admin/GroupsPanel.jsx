@@ -111,7 +111,7 @@ export function GroupsPanel({ users, onChanged, onError }) {
             该组当前成员将自动退回无组状态（角色保持不变）。此操作不可撤销。
           </DialogContentText>
           {deleteTarget && (
-            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.100', borderRadius: 1, maxHeight: 160, overflow: 'auto' }}>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: (t) => t.palette.mode === 'dark' ? '#1a1a2e' : '#f5f5f5', borderRadius: 1, maxHeight: 160, overflow: 'auto' }}>
               <Typography variant="caption" color="text.secondary">当前成员：</Typography>
               {users.filter(u => u.groupId === deleteTarget.id).map(u => (
                 <Typography key={u.id} variant="body2">{u.displayName} (@{u.username})</Typography>

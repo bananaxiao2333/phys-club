@@ -5,6 +5,7 @@ import {
 import { Warning as WarningIcon } from '@mui/icons-material';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api.js';
+import { GroupsPanel } from './GroupsPanel.jsx';
 import { MeritPanel } from './MeritPanel.jsx';
 import { InvitesPanel } from './InvitesPanel.jsx';
 import { PermissionsPanel } from './PermissionsPanel.jsx';
@@ -83,7 +84,7 @@ export function AdminPage({ groups, appState, onChanged, onError }) {
   }, [tab, settings, loadingSettings, loadSettings]);
 
   useEffect(() => {
-    if ((tab === 1 || tab === 3) && users === null && !loadingUsers) loadUsers();
+    if ((tab === 1 || tab === 3 || tab === 5) && users === null && !loadingUsers) loadUsers();
   }, [tab, users, loadingUsers, loadUsers]);
 
   useEffect(() => {
@@ -162,6 +163,7 @@ export function AdminPage({ groups, appState, onChanged, onError }) {
         <Tab label="邀请码" />
         <Tab label="成员" />
         <Tab label="侧边栏" />
+        <Tab label="社团组" />
       </Tabs>
 
       {tab === 0 && (
@@ -211,6 +213,10 @@ export function AdminPage({ groups, appState, onChanged, onError }) {
             <SidebarPanel settings={settings} onChanged={changed} onError={onError} />
           )}
         </TabLoader>
+      )}
+
+      {tab === 5 && (
+        <GroupsPanel users={users || []} onChanged={changed} onError={onError} />
       )}
     </Stack>
   );

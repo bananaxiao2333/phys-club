@@ -89,4 +89,10 @@ export const api = {
   fillReward: (body) => request('/api/admin/reward/fill', { method: 'POST', body }),
   distributeReward: (body) => request('/api/admin/reward/distribute', { method: 'POST', body }),
   refundMember: (body) => request('/api/admin/refund', { method: 'POST', body }),
+  adminGroups: () => request('/api/admin/groups'),
+  createGroup: (body) => request('/api/admin/groups', { method: 'POST', body }),
+  updateGroup: (id, body) => request('/api/admin/groups', { method: 'PATCH', body: { id, ...body } }),
+  deleteGroup: (id) => request(`/api/admin/groups?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  batchUpdateGroup: (body) => request('/api/admin/users', { method: 'PATCH', body: { action: 'batchGroup', ...body } }),
+  forcePassword: (body) => request('/api/admin/users', { method: 'PATCH', body: { action: 'forcePassword', ...body } }),
 };

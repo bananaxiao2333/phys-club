@@ -91,7 +91,7 @@ class ErrorBoundary extends Component {
             component="pre"
             sx={{
               textAlign: 'left',
-              bgcolor: 'grey.100',
+              bgcolor: (t) => t.palette.mode === 'dark' ? '#1a1a2e' : '#f5f5f5',
               color: 'text.primary',
               p: 2,
               borderRadius: 1,
@@ -104,14 +104,15 @@ class ErrorBoundary extends Component {
           >
             {this.state.error.stack || this.state.error.message}
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<RefreshIcon />}
-            onClick={() => { this.setState({ error: null }); window.location.reload(); }}
-            sx={{ mt: 3 }}
-          >
-            重新加载
-          </Button>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+            <Button
+              variant="contained"
+              startIcon={<RefreshIcon />}
+              onClick={() => { this.setState({ error: null }); window.location.reload(); }}
+            >
+              重新加载
+            </Button>
+          </Box>
         </Box>
       );
     }
