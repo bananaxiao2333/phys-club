@@ -55,10 +55,8 @@ body {
 
 .group-lanes {
   display: grid;
-  grid-template-columns: repeat(4, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 18px;
-  overflow-x: auto;
-  padding-bottom: 8px;
 }
 
 .group-lane {
@@ -96,7 +94,6 @@ body {
 .ledger-mobile-row {
   border: 1px solid #d9e5ef;
   border-radius: 6px;
-  background: #ffffff;
   padding: 14px;
 }
 

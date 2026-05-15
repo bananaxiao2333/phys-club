@@ -32,7 +32,7 @@ export function LedgerTable({ title, subtitle, entries, showAccount = true }) {
       <Box className="ledger-mobile-cards" sx={{ display: { xs: 'block', sm: 'none' }, px: 2, pb: 1 }}>
         <Stack spacing={1.25}>
           {visibleRows.map((entry) => (
-            <Box key={entry.id} className="ledger-mobile-row">
+            <Box key={entry.id} className="ledger-mobile-row" sx={{ bgcolor: 'background.paper' }}>
               <Stack direction="row" justifyContent="space-between" spacing={1.5} alignItems="center">
                 <Box sx={{ minWidth: 0 }}>
                   <Typography fontWeight={800} noWrap>{entry.reason}</Typography>
