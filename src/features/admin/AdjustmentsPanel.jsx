@@ -17,7 +17,7 @@ import { api } from '../../api.js';
 import { Surface } from '../../components/Surface.jsx';
 
 export function AdjustmentsPanel({ users, onChanged, onError }) {
-  const members = useMemo(() => users.filter((user) => ['member', 'planner'].includes(user.role) && user.active), [users]);
+  const members = useMemo(() => users.filter((user) => user.role !== 'admin' && user.active), [users]);
   const [memberForm, setMemberForm] = useState({ userIds: [], delta: 10, reason: '', detail: '' });
   const [poolForm, setPoolForm] = useState({ delta: 100, reason: '', detail: '' });
   const [busy, setBusy] = useState(false);

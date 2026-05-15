@@ -1,6 +1,6 @@
-import bcrypt from "bcryptjs";
-import { makeId, randomHex } from "./crypto-helpers.js";
+import { makeId, randomHex, sha256 } from "./crypto-helpers.js";
 
+const env = typeof process !== 'undefined' ? (process.env || {}) : {};
 // ---- constants ----
 
 export const GROUPS = [
@@ -40,14 +40,26 @@ export const SHARED_POOL = FIXED_POOL;
 
 export async function loadGroups() {
   const saved = await loadCollection(KEY_GROUPS);
-  const entries = Object.values(saved).filter(g => g && g.id);
-  return entries.length ? entries.sort((a, b) => (a.order ?? 99) - (b.order ?? 99)) : DEFAULT_GROUPS;
+  const entries = Object.values(saved).filter((g) => g && g.id);
+  return entries.length
+    ? entries.sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
+    : DEFAULT_GROUPS;
 }
 
 export async function createGroup({ name, alias, color, order }) {
   const groups = await loadCollection(KEY_GROUPS);
   const id = makeId("group");
-  const group = { id, name: String(name).trim().slice(0, 16), alias: String(alias || '').trim().toUpperCase().slice(0, 20), color: String(color || '#666').trim(), order: Number(order) || Object.keys(groups).length, createdAt: now() };
+  const group = {
+    id,
+    name: String(name).trim().slice(0, 16),
+    alias: String(alias || "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 20),
+    color: String(color || "#666").trim(),
+    order: Number(order) || Object.keys(groups).length,
+    createdAt: now(),
+  };
   if (!group.name) throw new Error("组名不能为空。");
   groups[id] = group;
   await saveCollection(KEY_GROUPS, groups);
@@ -58,8 +70,10 @@ export async function updateGroup(id, patch) {
   const groups = await loadCollection(KEY_GROUPS);
   const group = groups[id];
   if (!group) throw new Error("组不存在。");
-  if (patch.name !== undefined) group.name = String(patch.name).trim().slice(0, 16);
-  if (patch.alias !== undefined) group.alias = String(patch.alias).trim().toUpperCase().slice(0, 20);
+  if (patch.name !== undefined)
+    group.name = String(patch.name).trim().slice(0, 16);
+  if (patch.alias !== undefined)
+    group.alias = String(patch.alias).trim().toUpperCase().slice(0, 20);
   if (patch.color !== undefined) group.color = String(patch.color).trim();
   if (patch.order !== undefined) group.order = Number(patch.order);
   group.updatedAt = now();
@@ -73,7 +87,7 @@ export async function deleteGroup(id) {
   // Reassign members to no group
   const users = await loadCollection(KEY_USERS);
   for (const user of Object.values(users)) {
-    if (user.groupId === id && ['member', 'planner'].includes(user.role)) {
+    if (user.groupId === id && user.role !== "admin") {
       user.groupId = null;
       user.updatedAt = now();
     }
@@ -86,7 +100,7 @@ export async function deleteGroup(id) {
 
 export async function getGroupById(id) {
   const groups = await loadCollection(KEY_GROUPS);
-  return groups[id] || DEFAULT_GROUPS.find(g => g.id === id) || null;
+  return groups[id] || DEFAULT_GROUPS.find((g) => g.id === id) || null;
 }
 
 export const VIEW_DEFINITIONS = {
@@ -94,17 +108,38 @@ export const VIEW_DEFINITIONS = {
   members: { label: "成员", allowedRoles: ["public", "member", "planner"] },
   myLedger: { label: "我的明细", allowedRoles: ["member", "planner"] },
   statistics: { label: "统计台", allowedRoles: ["member", "planner"] },
+  clubAdmin: {
+    label: "社团管理台",
+    allowedRoles: ["planner"],
+    adminOnly: false,
+  },
 };
 
-const ROLE_RANK = { public: 0, member: 1, planner: 2, admin: 3 };
+// Built-in roles always exist. Custom roles loaded from settings.
+const BUILTIN_ROLES = {
+  public: { id: "public", name: "公开", rank: 0 },
+  member: { id: "member", name: "社员", rank: 1 },
+  admin: { id: "admin", name: "管理员", rank: 99 },
+};
+const DEFAULT_CUSTOM_ROLES = [{ id: "planner", name: "社团策划层", rank: 2 }];
 
+export function getRoleRank(roleId, customRoles) {
+  if (roleId === "admin") return 99;
+  if (roleId === "member") return 1;
+  if (roleId === "public") return 0;
+  const cr = (customRoles || []).find((r) => r.id === roleId);
+  return cr?.rank ?? 0;
+}
+
+// New per-role boolean visibility format
 const DEFAULT_SETTINGS = {
   updatedAt: null,
   visibility: {
-    overview: "public",
-    members: "planner",
-    myLedger: "member",
-    statistics: "planner",
+    overview: { public: true, member: true, planner: true },
+    members: { public: true, member: true, planner: true },
+    myLedger: { member: true, planner: true },
+    statistics: { member: true, planner: true },
+    clubAdmin: { planner: true },
   },
   sidebarUsers: {
     enabled: true,
@@ -112,24 +147,24 @@ const DEFAULT_SETTINGS = {
     maxUsers: 10,
     sortBy: "lastSeen",
   },
-  sidebarOrder: ["overview", "members", "myLedger", "statistics", "admin"],
-  duesSplitRatio: 30,          // % of new member dues going to fixed pool
+  sidebarOrder: [
+    "overview",
+    "members",
+    "myLedger",
+    "statistics",
+    "clubAdmin",
+    "admin",
+  ],
+  duesSplitRatio: 30, // % of new member dues going to fixed pool
   wartimeGap: 0,
-  customRoles: [],
+  customRoles: DEFAULT_CUSTOM_ROLES,
 };
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD ||
-  (console.warn(
-    "[db] WARNING: using default admin password — set ADMIN_PASSWORD env var",
-  ),
-  "rRycmg2eUwttM5XH69dq");
+const ADMIN_USERNAME = env.ADMIN_USERNAME || "admin";
 
 // ---- collection keys ----
 
 const KEY_USERS = "data_users";
-const KEY_USERNAMES = "data_usernames";
 const KEY_INVITES = "data_invites";
 const KEY_LEDGER = "data_ledger";
 const KEY_OPERATIONS = "data_operations";
@@ -148,6 +183,17 @@ const DEFAULT_GROUPS = [
   { id: "group_3", name: "脉冲星", alias: "PULSAR", color: "#8a7b00" },
   { id: "group_4", name: "磁陀星", alias: "MAGNETAR", color: "#7b008f" },
 ];
+
+// ---- secrets (admin password & JWT secret stored in KV) ----
+
+let _secretWarned = {};
+export async function getSecret(name) {
+  // Use env vars — EdgeOne local emulator's kv_data.get() hangs for non-existent keys.
+  // In production, set ADMIN_PASSWORD / JWT_SECRET via EdgeOne environment variables.
+  return name === 'ADMIN_PASSWORD'
+    ? (env.ADMIN_PASSWORD || (_secretWarned.admin || (console.warn('[db] using default admin password'), _secretWarned.admin = true), 'rRycmg2eUwttM5XH69dq'))
+    : (env.JWT_SECRET || (_secretWarned.jwt || (console.warn('[db] using default JWT_SECRET'), _secretWarned.jwt = true), 'dev-only-change-this-secret'));
+}
 
 // ---- KV helpers with base64 encoding ----
 // The local KV emulator's RESP transport corrupts raw JSON strings
@@ -231,7 +277,10 @@ export async function getActiveSessions() {
   const sessions = await loadCollection(KEY_SESSIONS);
   const nowTs = Date.now();
   return Object.values(sessions)
-    .filter((s) => s && typeof s.userId === 'string' && typeof s.lastSeen === 'number')
+    .filter(
+      (s) =>
+        s && typeof s.userId === "string" && typeof s.lastSeen === "number",
+    )
     .filter((s) => nowTs - s.lastSeen <= SESSION_TTL_MS)
     .sort((a, b) => b.lastSeen - a.lastSeen);
 }
@@ -261,6 +310,11 @@ export async function setMaintenanceStatus(active) {
 
 // ---- helpers ----
 
+async function makePasswordHash(password) {
+  const salt = randomHex(16);
+  return { passwordHash: await sha256(salt + ':' + password), passwordSalt: salt };
+}
+
 function now() {
   return new Date().toISOString();
 }
@@ -285,9 +339,7 @@ function publicUser(user) {
 
 function viewerRole(user) {
   if (!user) return "public";
-  if (user.role === "admin") return "admin";
-  if (user.role === "planner") return "planner";
-  return "member";
+  return user.role || "member";
 }
 
 export function canView(user, viewId, settings) {
@@ -295,13 +347,12 @@ export function canView(user, viewId, settings) {
   if (role === "admin") return true;
   const vis = settings.visibility?.[viewId];
   if (!vis) return false;
-  // New per-role boolean format: { public: true, member: true, ... }
-  if (typeof vis === 'object' && !Array.isArray(vis)) return vis[role] === true;
-  // Old string format: 'member' = minimum role
-  if (typeof vis === 'string') {
-    if (vis === 'public') return true;
+  if (typeof vis === "object" && !Array.isArray(vis)) return vis[role] === true;
+  if (typeof vis === "string") {
+    if (vis === "public") return true;
     if (!user) return false;
-    return ROLE_RANK[role] >= ROLE_RANK[vis];
+    const cr = settings.customRoles || DEFAULT_SETTINGS.customRoles;
+    return getRoleRank(role, cr) >= getRoleRank(vis, cr);
   }
   return false;
 }
@@ -344,17 +395,16 @@ export async function seedDefaultData() {
   if (settings.updatedAt) return;
 
   const adminUsername = normalizeUsername(ADMIN_USERNAME);
-  const usernames = await loadCollection(KEY_USERNAMES);
   const users = await loadCollection(KEY_USERS);
-  const existingAdminId = usernames[adminUsername];
+  const existingAdmin = Object.values(users).find(u => u && u.username === adminUsername);
 
-  if (!existingAdminId) {
+  if (!existingAdmin) {
     const createdAt = now();
     const admin = {
       id: makeId("admin"),
       username: adminUsername,
       displayName: "系统管理员",
-      passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 12),
+      ...await makePasswordHash(await getSecret('ADMIN_PASSWORD')),
       role: "admin",
       groupId: null,
       active: true,
@@ -362,11 +412,9 @@ export async function seedDefaultData() {
       updatedAt: createdAt,
     };
     users[admin.id] = admin;
-    usernames[admin.username] = admin.id;
     await saveCollection(KEY_USERS, users);
-    await saveCollection(KEY_USERNAMES, usernames);
   } else {
-    const admin = users[existingAdminId];
+    const admin = existingAdmin;
     if (
       admin &&
       (admin.role !== "admin" || !admin.active || admin.groupId !== null)
@@ -382,7 +430,7 @@ export async function seedDefaultData() {
 
   // Seed default groups if not present
   const groups = await loadCollection(KEY_GROUPS);
-  if (!Object.values(groups).filter(g => g && g.id).length) {
+  if (!Object.values(groups).filter((g) => g && g.id).length) {
     for (const g of DEFAULT_GROUPS) groups[g.id] = g;
     await saveCollection(KEY_GROUPS, groups);
   }
@@ -403,10 +451,11 @@ export async function getSettings() {
   // Validate old string-format values; new per-role objects pass through as-is
   for (const viewId of Object.keys(mergedVisibility)) {
     const val = mergedVisibility[viewId];
-    if (typeof val !== 'string') continue; // new per-role format, skip validation
+    if (typeof val !== "string") continue; // new per-role format, skip validation
     const def = VIEW_DEFINITIONS[viewId];
     if (def?.allowedRoles && !def.allowedRoles.includes(val)) {
-      mergedVisibility[viewId] = DEFAULT_SETTINGS.visibility[viewId] || def.allowedRoles[0];
+      mergedVisibility[viewId] =
+        DEFAULT_SETTINGS.visibility[viewId] || def.allowedRoles[0];
     }
   }
   return {
@@ -427,14 +476,14 @@ export async function updateSettings(patch) {
   // Handle both new per-role format { viewId: { role: bool } } and old string format { viewId: 'member' }
   if (patch.visibility) {
     const firstVal = Object.values(patch.visibility)[0];
-    if (firstVal && typeof firstVal === 'object' && !Array.isArray(firstVal)) {
+    if (firstVal && typeof firstVal === "object" && !Array.isArray(firstVal)) {
       // New per-role boolean format — use directly
       visibility = patch.visibility;
     } else {
       // Old string format
       for (const [viewId, role] of Object.entries(patch.visibility)) {
         const def = VIEW_DEFINITIONS[viewId];
-        if (!def || !ROLE_RANK.hasOwnProperty(role)) continue;
+        if (!def || !role) continue;
         if (def.allowedRoles && !def.allowedRoles.includes(role)) continue;
         visibility[viewId] = role;
       }
@@ -455,15 +504,31 @@ export async function updateSettings(patch) {
   if (patch.sidebarOrder) {
     sidebarOrder = patch.sidebarOrder;
   }
-  let duesSplitRatio = current.duesSplitRatio ?? DEFAULT_SETTINGS.duesSplitRatio;
+  let duesSplitRatio =
+    current.duesSplitRatio ?? DEFAULT_SETTINGS.duesSplitRatio;
   if (patch.duesSplitRatio !== undefined) {
-    duesSplitRatio = Math.max(0, Math.min(100, Number(patch.duesSplitRatio) || 0));
+    duesSplitRatio = Math.max(
+      0,
+      Math.min(100, Number(patch.duesSplitRatio) || 0),
+    );
   }
   let wartimeGap = current.wartimeGap ?? 0;
-  if (patch.wartimeGap !== undefined) { wartimeGap = Math.max(0, Number(patch.wartimeGap) || 0); }
+  if (patch.wartimeGap !== undefined) {
+    wartimeGap = Math.max(0, Number(patch.wartimeGap) || 0);
+  }
   let customRoles = current.customRoles || [];
-  if (patch.customRoles !== undefined) { customRoles = patch.customRoles; }
-  const next = { ...current, visibility, sidebarOrder, duesSplitRatio, wartimeGap, customRoles, updatedAt: now() };
+  if (patch.customRoles !== undefined) {
+    customRoles = patch.customRoles;
+  }
+  const next = {
+    ...current,
+    visibility,
+    sidebarOrder,
+    duesSplitRatio,
+    wartimeGap,
+    customRoles,
+    updatedAt: now(),
+  };
   await saveCollection(KEY_SETTINGS, next);
   await saveCollection(KEY_SIDEBAR, sidebarUsers);
   console.log(
@@ -499,23 +564,21 @@ export async function createUser({
   const clean = normalizeUsername(username);
   assertUsername(clean);
   assertPassword(password);
-  if (!["member", "planner", "admin"].includes(role))
-    throw new Error("无效用户角色。");
+  if (role === "public") throw new Error("无效用户角色。");
   if (role !== "admin" && !isValidGroup(groupId))
     throw new Error("请选择有效组别。");
 
-  const usernames = await loadCollection(KEY_USERNAMES);
-  if (usernames[clean]) throw new Error("用户名已被使用。");
-
   const users = await loadCollection(KEY_USERS);
+  // Check for duplicate username
+  if (Object.values(users).some(u => u && u.username === clean))
+    throw new Error("用户名已被使用。");
+
   const createdAt = now();
   const user = {
     id: makeId("user"),
     username: clean,
-    displayName: String(displayName || clean)
-      .trim()
-      .slice(0, 32),
-    passwordHash: await bcrypt.hash(password, 12),
+    displayName: String(displayName || clean).trim().slice(0, 32),
+    ...await makePasswordHash(password),
     role,
     groupId: role === "admin" ? null : groupId,
     positionTitle: "",
@@ -525,43 +588,43 @@ export async function createUser({
   };
 
   users[user.id] = user;
-  usernames[user.username] = user.id;
   await saveCollection(KEY_USERS, users);
-  await saveCollection(KEY_USERNAMES, usernames);
   return publicUser(user);
 }
 
 export async function getUserById(id) {
   const users = await loadCollection(KEY_USERS);
   const user = users[id];
-  return user && typeof user.id === 'string' && typeof user.role === 'string' ? user : null;
+  return user && typeof user.id === "string" && typeof user.role === "string"
+    ? user
+    : null;
 }
 
 export async function getUserByUsername(username) {
-  const usernames = await loadCollection(KEY_USERNAMES);
-  const id = usernames[normalizeUsername(username)];
-  if (!id) return null;
-  return getUserById(id);
+  const clean = normalizeUsername(username);
+  const users = await loadCollection(KEY_USERS);
+  const user = Object.values(users).find(u => u && u.username === clean);
+  return user && typeof user.id === 'string' ? user : null;
 }
 
 export async function verifyLogin(username, password) {
   const user = await getUserByUsername(username);
-  if (!user || !user.active) return null;
-  const ok = await bcrypt.compare(String(password || ""), user.passwordHash);
-  return ok ? publicUser(user) : null;
+  if (!user || !user.active || !user.passwordHash || !user.passwordSalt) return null;
+  const expected = await sha256(user.passwordSalt + ':' + password);
+  if (expected !== user.passwordHash) return null;
+  return publicUser(user);
 }
 
 export async function changePassword(userId, currentPassword, nextPassword) {
   const users = await loadCollection(KEY_USERS);
   const user = users[userId];
   if (!user) throw new Error("用户不存在。");
-  const ok = await bcrypt.compare(
-    String(currentPassword || ""),
-    user.passwordHash,
-  );
-  if (!ok) throw new Error("当前密码不正确。");
+  const expected = await sha256(user.passwordSalt + ':' + currentPassword);
+  if (expected !== user.passwordHash) throw new Error("当前密码不正确。");
   assertPassword(nextPassword);
-  user.passwordHash = await bcrypt.hash(nextPassword, 12);
+  const pw = await makePasswordHash(nextPassword);
+  user.passwordHash = pw.passwordHash;
+  user.passwordSalt = pw.passwordSalt;
   user.updatedAt = now();
   await saveCollection(KEY_USERS, users);
   return publicUser(user);
@@ -599,7 +662,7 @@ export async function listUsers() {
     .filter(Boolean)
     .sort((a, b) => {
       if (a.role !== b.role)
-        return (ROLE_RANK[b.role] || 0) - (ROLE_RANK[a.role] || 0);
+        return (getRoleRank(b.role, []) || 0) - (getRoleRank(a.role, []) || 0);
       return (a.displayName || "").localeCompare(b.displayName || "", "zh-CN");
     });
 }
@@ -615,8 +678,7 @@ export async function updateUser(userId, patch) {
     user.displayName = dn.slice(0, 32);
   }
   if (patch.role !== undefined) {
-    if (!["member", "planner", "admin"].includes(patch.role))
-      throw new Error("无效用户角色。");
+    if (patch.role === "public") throw new Error("无效用户角色。");
     user.role = patch.role;
   }
   if (user.role === "admin") {
@@ -628,14 +690,7 @@ export async function updateUser(userId, patch) {
     user.groupId = GROUPS[0].id;
   }
   if (patch.positionTitle !== undefined) {
-    user.positionTitle =
-      user.role === "planner"
-        ? String(patch.positionTitle || "")
-            .trim()
-            .slice(0, 32)
-        : "";
-  } else if (user.role !== "planner") {
-    user.positionTitle = "";
+    user.positionTitle = String(patch.positionTitle || "").trim().slice(0, 32);
   }
   if (patch.active !== undefined) user.active = Boolean(patch.active);
 
@@ -646,8 +701,19 @@ export async function updateUser(userId, patch) {
 
 // ---- batch user operations ----
 
+export async function hardDeleteUser(userId) {
+  const users = await loadCollection(KEY_USERS);
+  const user = users[userId];
+  if (!user) throw new Error("用户不存在。");
+  if (user.role === 'admin') throw new Error("不能强制删除管理员。");
+  delete users[userId];
+  await saveCollection(KEY_USERS, users);
+  return { deleted: userId };
+}
+
 export async function batchUpdateGroup({ userIds, groupId, operatorId }) {
-  if (!Array.isArray(userIds) || !userIds.length) throw new Error("请选择至少一个用户。");
+  if (!Array.isArray(userIds) || !userIds.length)
+    throw new Error("请选择至少一个用户。");
   const users = await loadCollection(KEY_USERS);
   const results = [];
   for (const uid of userIds) {
@@ -666,9 +732,19 @@ export async function forcePassword({ userId, newPassword }) {
   const user = users[userId];
   if (!user) throw new Error("用户不存在。");
   assertPassword(newPassword);
-  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  const pw = await makePasswordHash(newPassword);
+  user.passwordHash = pw.passwordHash;
+  user.passwordSalt = pw.passwordSalt;
   user.updatedAt = now();
   await saveCollection(KEY_USERS, users);
+  // Verify KV persistence
+  const verify = await loadCollection(KEY_USERS);
+  const vUser = verify[userId];
+  if (vUser && vUser.passwordHash === pw.passwordHash) {
+    console.log("[forcePassword] KV write verified OK");
+  } else {
+    console.error("[forcePassword] KV write FAILED");
+  }
   return publicUser(user);
 }
 
@@ -817,8 +893,7 @@ export async function addMemberAdjustment({
   operatorId,
 }) {
   const user = await getUserById(userId);
-  if (!user || !["member", "planner"].includes(user.role))
-    throw new Error("请选择有效社员。");
+  if (!user || user.role === "admin") throw new Error("请选择有效社员。");
   if (!user.active) throw new Error("该社员已停用。");
   const amount = assertDelta(delta, "积分变化");
   return createLedgerOperation({
@@ -897,10 +972,18 @@ export async function addSharedPoolAdjustment({
 
 // ---- new 功勋 operations (casting / destruction / transfer) ----
 
-async function createMeritOperation({ type, reason, detail = "", operatorId, entries, metadata = {} }) {
+async function createMeritOperation({
+  type,
+  reason,
+  detail = "",
+  operatorId,
+  entries,
+  metadata = {},
+}) {
   const cleanReason = String(reason || "").trim();
   if (!cleanReason) throw new Error("请填写原因。");
-  if (!Array.isArray(entries) || entries.length < 2) throw new Error("分录至少需要两条。");
+  if (!Array.isArray(entries) || entries.length < 2)
+    throw new Error("分录至少需要两条。");
   const sum = entries.reduce((t, e) => t + Number(e.delta || 0), 0);
   if (sum !== 0) throw new Error("分录未平账。");
 
@@ -909,7 +992,9 @@ async function createMeritOperation({ type, reason, detail = "", operatorId, ent
     id: makeId("op"),
     type,
     reason: cleanReason.slice(0, 120),
-    detail: String(detail || "").trim().slice(0, 500),
+    detail: String(detail || "")
+      .trim()
+      .slice(0, 500),
     operatorId,
     metadata,
     createdAt,
@@ -941,11 +1026,19 @@ async function createMeritOperation({ type, reason, detail = "", operatorId, ent
 }
 
 // 铸造：真实资金进入系统，功勋增加
-export async function castMerit({ amount, poolId, reason, detail = "", operatorId }) {
+export async function castMerit({
+  amount,
+  poolId,
+  reason,
+  detail = "",
+  operatorId,
+}) {
   const amt = Math.abs(assertDelta(amount, "铸造金额"));
   return createMeritOperation({
     type: "casting",
-    reason, detail, operatorId,
+    reason,
+    detail,
+    operatorId,
     metadata: { poolId, amount: amt },
     entries: [
       { accountType: "pool", accountId: poolId, poolId, delta: amt },
@@ -955,11 +1048,19 @@ export async function castMerit({ amount, poolId, reason, detail = "", operatorI
 }
 
 // 销毁：真实资金离开系统，功勋消灭
-export async function destroyMerit({ amount, poolId, reason, detail = "", operatorId }) {
+export async function destroyMerit({
+  amount,
+  poolId,
+  reason,
+  detail = "",
+  operatorId,
+}) {
   const amt = Math.abs(assertDelta(amount, "销毁金额"));
   return createMeritOperation({
     type: "destruction",
-    reason, detail, operatorId,
+    reason,
+    detail,
+    operatorId,
     metadata: { poolId, amount: amt },
     entries: [
       { accountType: "pool", accountId: poolId, poolId, delta: -amt },
@@ -969,15 +1070,34 @@ export async function destroyMerit({ amount, poolId, reason, detail = "", operat
 }
 
 // 转账：池子之间的功勋转移
-export async function transferMerit({ fromPoolId, toPoolId, amount, reason, detail = "", operatorId }) {
+export async function transferMerit({
+  fromPoolId,
+  toPoolId,
+  amount,
+  reason,
+  detail = "",
+  operatorId,
+}) {
   const amt = Math.abs(assertDelta(amount, "转账金额"));
   return createMeritOperation({
     type: "transfer",
-    reason, detail, operatorId,
+    reason,
+    detail,
+    operatorId,
     metadata: { fromPoolId, toPoolId, amount: amt },
     entries: [
-      { accountType: "pool", accountId: fromPoolId, poolId: fromPoolId, delta: -amt },
-      { accountType: "pool", accountId: toPoolId, poolId: toPoolId, delta: amt },
+      {
+        accountType: "pool",
+        accountId: fromPoolId,
+        poolId: fromPoolId,
+        delta: -amt,
+      },
+      {
+        accountType: "pool",
+        accountId: toPoolId,
+        poolId: toPoolId,
+        delta: amt,
+      },
     ],
   });
 }
@@ -997,17 +1117,40 @@ export async function allocateDues({ userId, amount, operatorId }) {
     reason: `社费拆分（${settings.duesSplitRatio || 30}%归公）`,
     detail: `${amt} 功勋铸造 → 固定池 ${toFixed} + 个人 ${toMember}`,
     operatorId,
-    metadata: { userId, amount: amt, splitRatio: settings.duesSplitRatio || 30, toFixed, toMember },
+    metadata: {
+      userId,
+      amount: amt,
+      splitRatio: settings.duesSplitRatio || 30,
+      toFixed,
+      toMember,
+    },
     entries: [
-      { accountType: "pool", accountId: FIXED_POOL.id, poolId: FIXED_POOL.id, delta: toFixed },
-      { accountType: "member", accountId: userId, userId, groupId: user.groupId, delta: toMember },
+      {
+        accountType: "pool",
+        accountId: FIXED_POOL.id,
+        poolId: FIXED_POOL.id,
+        delta: toFixed,
+      },
+      {
+        accountType: "member",
+        accountId: userId,
+        userId,
+        groupId: user.groupId,
+        delta: toMember,
+      },
       { accountType: "external", accountId: "external", delta: -amt },
     ],
   });
 }
 
 // 项目结算：待结算池 → 付成本（销毁）→ 利润转固定池
-export async function settleProject({ revenue, cost, reason, detail = "", operatorId }) {
+export async function settleProject({
+  revenue,
+  cost,
+  reason,
+  detail = "",
+  operatorId,
+}) {
   const rev = Math.abs(assertDelta(revenue, "项目收入"));
   const cst = Math.abs(assertDelta(cost, "项目成本"));
   if (cst > rev) throw new Error("成本不能超过收入。");
@@ -1016,43 +1159,98 @@ export async function settleProject({ revenue, cost, reason, detail = "", operat
   return createMeritOperation({
     type: "project_settle",
     reason,
-    detail: `${detail} — 收入 ${rev}，成本 ${cst}，利润 ${profit}`.slice(0, 500),
+    detail: `${detail} — 收入 ${rev}，成本 ${cst}，利润 ${profit}`.slice(
+      0,
+      500,
+    ),
     operatorId,
     metadata: { revenue: rev, cost: cst, profit },
     entries: [
-      { accountType: "pool", accountId: SETTLEMENT_POOL.id, poolId: SETTLEMENT_POOL.id, delta: -(rev - cst) },
-      ...(cst > 0 ? [{ accountType: "external", accountId: "external", delta: cst }] : []),
-      ...(profit > 0 ? [{ accountType: "pool", accountId: FIXED_POOL.id, poolId: FIXED_POOL.id, delta: profit }] : []),
+      {
+        accountType: "pool",
+        accountId: SETTLEMENT_POOL.id,
+        poolId: SETTLEMENT_POOL.id,
+        delta: -(rev - cst),
+      },
+      ...(cst > 0
+        ? [{ accountType: "external", accountId: "external", delta: cst }]
+        : []),
+      ...(profit > 0
+        ? [
+            {
+              accountType: "pool",
+              accountId: FIXED_POOL.id,
+              poolId: FIXED_POOL.id,
+              delta: profit,
+            },
+          ]
+        : []),
     ],
   });
 }
 
 // 填充奖励池：从固定池划拨到奖励池
-export async function fillRewardPool({ amount, reason, detail = "", operatorId }) {
+export async function fillRewardPool({
+  amount,
+  reason,
+  detail = "",
+  operatorId,
+}) {
   const amt = Math.abs(assertDelta(amount, "奖励池填充金额"));
   return createMeritOperation({
     type: "reward_fill",
-    reason, detail, operatorId,
+    reason,
+    detail,
+    operatorId,
     metadata: { amount: amt },
     entries: [
-      { accountType: "pool", accountId: FIXED_POOL.id, poolId: FIXED_POOL.id, delta: -amt },
-      { accountType: "pool", accountId: REWARD_POOL.id, poolId: REWARD_POOL.id, delta: amt },
+      {
+        accountType: "pool",
+        accountId: FIXED_POOL.id,
+        poolId: FIXED_POOL.id,
+        delta: -amt,
+      },
+      {
+        accountType: "pool",
+        accountId: REWARD_POOL.id,
+        poolId: REWARD_POOL.id,
+        delta: amt,
+      },
     ],
   });
 }
 
 // 发放奖励：从奖励池发给社员
-export async function distributeReward({ userId, amount, reason, detail = "", operatorId }) {
+export async function distributeReward({
+  userId,
+  amount,
+  reason,
+  detail = "",
+  operatorId,
+}) {
   const user = await getUserById(userId);
   if (!user) throw new Error("社员不存在。");
   const amt = Math.abs(assertDelta(amount, "奖励金额"));
   return createMeritOperation({
     type: "reward_distribute",
-    reason, detail, operatorId,
+    reason,
+    detail,
+    operatorId,
     metadata: { userId, amount: amt },
     entries: [
-      { accountType: "pool", accountId: REWARD_POOL.id, poolId: REWARD_POOL.id, delta: -amt },
-      { accountType: "member", accountId: userId, userId, groupId: user.groupId, delta: amt },
+      {
+        accountType: "pool",
+        accountId: REWARD_POOL.id,
+        poolId: REWARD_POOL.id,
+        delta: -amt,
+      },
+      {
+        accountType: "member",
+        accountId: userId,
+        userId,
+        groupId: user.groupId,
+        delta: amt,
+      },
     ],
   });
 }
@@ -1063,10 +1261,14 @@ export async function refundAndDeactivate({ userId, operatorId }) {
   const user = users[userId];
   if (!user) throw new Error("社员不存在。");
   if (!user.active) throw new Error("该社员已被注销。");
-  if (!["member", "planner"].includes(user.role)) throw new Error("仅社员可注销退款。");
+  if (user.role === "admin") throw new Error("仅社员可注销退款。");
 
   // Calculate total balance
-  const allEntries = await listLedgerEntries({ accountType: "member", accountId: userId, limit: 1000 });
+  const allEntries = await listLedgerEntries({
+    accountType: "member",
+    accountId: userId,
+    limit: 1000,
+  });
   const balance = allEntries.reduce((sum, e) => sum + e.delta, 0);
   if (balance <= 0) throw new Error("账户余额为零或负，无需退款。");
 
@@ -1077,7 +1279,13 @@ export async function refundAndDeactivate({ userId, operatorId }) {
     operatorId,
     metadata: { userId, refundAmount: balance },
     entries: [
-      { accountType: "member", accountId: userId, userId, groupId: user.groupId, delta: -balance },
+      {
+        accountType: "member",
+        accountId: userId,
+        userId,
+        groupId: user.groupId,
+        delta: -balance,
+      },
       { accountType: "external", accountId: "external", delta: balance },
     ],
   });
@@ -1147,7 +1355,7 @@ export async function getLeaderboard() {
 
   const groups = await loadGroups();
   const members = users
-    .filter((u) => ["member", "planner"].includes(u.role))
+    .filter((u) => u.role !== "admin" && u.role !== "public")
     .map((u) => ({
       ...u,
       groupName: groups.find((g) => g.id === u.groupId)?.name || "未分组",
@@ -1168,13 +1376,23 @@ export async function getLeaderboard() {
     };
   });
 
-  const poolEntries = await listLedgerEntries({ accountType: "pool", limit: 1000 });
-  const fixedTotal = poolEntries.filter(e => e.poolId === FIXED_POOL.id).reduce((s, e) => s + e.delta, 0);
-  const settlementTotal = poolEntries.filter(e => e.poolId === SETTLEMENT_POOL.id).reduce((s, e) => s + e.delta, 0);
-  const rewardTotal = poolEntries.filter(e => e.poolId === REWARD_POOL.id).reduce((s, e) => s + e.delta, 0);
+  const poolEntries = await listLedgerEntries({
+    accountType: "pool",
+    limit: 1000,
+  });
+  const fixedTotal = poolEntries
+    .filter((e) => e.poolId === FIXED_POOL.id)
+    .reduce((s, e) => s + e.delta, 0);
+  const settlementTotal = poolEntries
+    .filter((e) => e.poolId === SETTLEMENT_POOL.id)
+    .reduce((s, e) => s + e.delta, 0);
+  const rewardTotal = poolEntries
+    .filter((e) => e.poolId === REWARD_POOL.id)
+    .reduce((s, e) => s + e.delta, 0);
 
   return {
-    groups: grouped, members,
+    groups: grouped,
+    members,
     fixedPool: { ...FIXED_POOL, total: fixedTotal },
     settlementPool: { ...SETTLEMENT_POOL, total: settlementTotal },
     rewardPool: { ...REWARD_POOL, total: rewardTotal },
@@ -1259,5 +1477,5 @@ export async function assertCanView(user, viewId) {
 }
 
 export function roleRank(role) {
-  return ROLE_RANK[role] ?? 0;
+  return getRoleRank(role, []);
 }

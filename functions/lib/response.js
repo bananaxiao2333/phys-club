@@ -1,7 +1,8 @@
 // Standard JSON response builder with CORS headers for EdgeOne cloud functions.
+const env = typeof process !== 'undefined' ? (process.env || {}) : {};
 
 function buildCorsHeaders(origin) {
-  const allowed = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
+  const allowed = (env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
   let allowOrigin = null;
   if (!allowed.length) {
     // Dev mode: allow localhost
@@ -26,8 +27,8 @@ function buildCorsHeaders(origin) {
 function jsonHeaders() {
   const h = { 'Content-Type': 'application/json' };
   // In production (CORS_ORIGIN set), use the configured origin. In dev, allow localhost.
-  if (process.env.CORS_ORIGIN) {
-    h['Access-Control-Allow-Origin'] = process.env.CORS_ORIGIN;
+  if (env.CORS_ORIGIN) {
+    h['Access-Control-Allow-Origin'] = env.CORS_ORIGIN;
     h['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
     h['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
     h['Cache-Control'] = 'no-cache, no-store, must-revalidate';
@@ -59,7 +60,7 @@ export function handleError(error) {
     });
   }
   console.error(error);
-  return new Response(JSON.stringify({ message: '服务器处理请求时发生错误。' }), {
+  return new Response(JSON.stringify({ message: error.message || '服务器处理请求时发生错误。', stack: error.stack?.split('\n').slice(0, 3).join('\n') }), {
     status: 500,
     headers: { 'Content-Type': 'application/json' },
   });

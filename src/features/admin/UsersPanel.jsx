@@ -1,24 +1,28 @@
 import { Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
-import { LockReset as PasswordIcon, Save as SaveIcon } from '@mui/icons-material';
+import { DeleteForever as DeleteIcon, LockReset as PasswordIcon, Save as SaveIcon } from '@mui/icons-material';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
 import { Surface } from '../../components/Surface.jsx';
-import { roleLabels } from '../../utils/format.js';
+import { roleLabel, roleLabels } from '../../utils/format.js';
+
+function isAdminRole(r) { return r === 'admin'; }
+function canHavePositionTitle() { return true; }
 
 function draftFromUser(user) {
-  return { displayName: user.displayName, groupId: user.role === 'admin' ? null : user.groupId, role: user.role, positionTitle: user.role === 'planner' ? user.positionTitle || '' : '', active: user.active };
+  return { displayName: user.displayName, groupId: isAdminRole(user.role) ? null : user.groupId, role: user.role, positionTitle: user.positionTitle || '', active: user.active };
 }
 
 function normalizedDraft(user, draft = {}) {
   const role = draft.role || user.role || 'member';
-  return { displayName: String(draft.displayName ?? user.displayName ?? '').trim(), groupId: role === 'admin' ? null : draft.groupId || user.groupId || '', role, positionTitle: role === 'planner' ? String(draft.positionTitle || '').trim() : '', active: Boolean(draft.active) };
+  return { displayName: String(draft.displayName ?? user.displayName ?? '').trim(), groupId: isAdminRole(role) ? null : draft.groupId || user.groupId || '', role, positionTitle: String(draft.positionTitle ?? user.positionTitle ?? '').trim(), active: Boolean(draft.active) };
 }
 
 function hasChanged(user, draft) {
   return JSON.stringify(normalizedDraft(user, draft)) !== JSON.stringify(draftFromUser(user));
 }
 
-export function UsersPanel({ groups, users, currentUserId, onChanged, onError }) {
+export function UsersPanel({ groups, users, currentUserId, customRoles, onChanged, onError }) {
+  const allRoleEntries = [...Object.entries(roleLabels), ...(customRoles || []).map(r => [r.id, r.name])];
   const editableUsers = users;
   const [drafts, setDrafts] = useState({});
   const [pendingPromotion, setPendingPromotion] = useState(null);
@@ -26,6 +30,7 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
   const [batchGroupId, setBatchGroupId] = useState('');
   const [passwordTarget, setPasswordTarget] = useState(null);
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [busyBatch, setBusyBatch] = useState(false);
 
   useEffect(() => { setDrafts(Object.fromEntries(editableUsers.map(u => [u.id, draftFromUser(u)]))); }, [users]);
@@ -67,6 +72,16 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
       await api.forcePassword({ userId: passwordTarget.id, newPassword: passwordForm.newPassword });
       setPasswordTarget(null); setPasswordForm({ newPassword: '', confirmPassword: '' });
       await onChanged(`已强制修改密码。`);
+    } catch (e) { onError(e.message); } finally { setBusyBatch(false); }
+  }
+
+  async function submitHardDelete() {
+    if (!deleteTarget) return;
+    setBusyBatch(true);
+    try {
+      await api.hardDeleteUser(deleteTarget.id);
+      setDeleteTarget(null);
+      await onChanged(`已强制删除用户 ${deleteTarget.displayName}。`, { _reload: 'users' });
     } catch (e) { onError(e.message); } finally { setBusyBatch(false); }
   }
 
@@ -122,15 +137,15 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
                     <TableCell sx={{ minWidth: 150 }}>
                       <FormControl size="small" fullWidth>
                         <Select value={draft.role || user.role || 'member'} onChange={e => setDrafts(prev => ({ ...prev, [user.id]: { ...draft, role: e.target.value } }))} disabled={isSelf}>
-                          {Object.entries(roleLabels).map(([value, label]) => <MenuItem value={value} key={value}>{label}</MenuItem>)}
+                          {allRoleEntries.map(([value, label]) => <MenuItem value={value} key={value}>{label}</MenuItem>)}
                         </Select>
                       </FormControl>
                     </TableCell>
                     <TableCell sx={{ minWidth: 140 }}>
-                      {(draft.role || user.role) === 'planner' ? <TextField size="small" variant="standard" placeholder="职位名称" value={draft.positionTitle || ''} onChange={e => setDrafts(prev => ({ ...prev, [user.id]: { ...draft, positionTitle: e.target.value } }))} InputProps={{ disableUnderline: true }} /> : <Typography variant="body2" color="text.secondary">—</Typography>}
+                      <TextField size="small" variant="standard" placeholder="职位" value={draft.positionTitle || ''} onChange={e => setDrafts(prev => ({ ...prev, [user.id]: { ...draft, positionTitle: e.target.value } }))} InputProps={{ disableUnderline: true }} />
                     </TableCell>
                     <TableCell sx={{ minWidth: 140 }}>
-                      {(draft.role || user.role) === 'admin' ? <Typography variant="body2" color="text.secondary">—</Typography> : (
+                      {isAdminRole(draft.role || user.role) ? <Typography variant="body2" color="text.secondary">—</Typography> : (
                         <FormControl size="small" fullWidth>
                           <Select value={draft.groupId || ''} onChange={e => setDrafts(prev => ({ ...prev, [user.id]: { ...draft, groupId: e.target.value } }))}>
                             <MenuItem value="">—</MenuItem>
@@ -142,6 +157,9 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
                     <TableCell><Switch size="small" checked={Boolean(draft.active)} onChange={e => setDrafts(prev => ({ ...prev, [user.id]: { ...draft, active: e.target.checked } }))} disabled={isSelf} /></TableCell>
                     <TableCell>
                       <Button size="small" startIcon={<PasswordIcon />} onClick={() => { setPasswordTarget(user); setPasswordForm({ newPassword: '', confirmPassword: '' }); }}>改密</Button>
+                      {!isSelf && user.role !== 'admin' && (
+                        <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteTarget(user)}>删除</Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -176,6 +194,17 @@ export function UsersPanel({ groups, users, currentUserId, onChanged, onError })
         <DialogActions>
           <Button onClick={() => setPasswordTarget(null)}>取消</Button>
           <Button variant="contained" color="error" onClick={submitForcePassword} disabled={busyBatch}>确认修改</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <DialogTitle sx={{ color: 'error.main' }}>强制删除用户</DialogTitle>
+        <DialogContent>
+          <Typography>确认永久删除 <strong>{deleteTarget?.displayName}</strong>（@{deleteTarget?.username}）？此操作不可撤销，所有相关数据将丢失。</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)}>取消</Button>
+          <Button variant="contained" color="error" onClick={submitHardDelete} disabled={busyBatch}>确认删除</Button>
         </DialogActions>
       </Dialog>
     </Stack>

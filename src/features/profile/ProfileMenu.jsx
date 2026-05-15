@@ -21,9 +21,9 @@ import {
 } from '@mui/icons-material';
 import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
-import { formatTime, roleAvatarSx, roleLabels, signedNumber } from '../../utils/format.js';
+import { formatTime, roleAvatarSx, roleLabel, signedNumber } from '../../utils/format.js';
 
-export function ProfileMenu({ user, personalStats, onChanged, onError, onLogout }) {
+export function ProfileMenu({ user, personalStats, customRoles, onChanged, onError, onLogout }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -38,7 +38,7 @@ export function ProfileMenu({ user, personalStats, onChanged, onError, onLogout 
   if (!user) return null;
 
   const open = Boolean(anchorEl);
-  const roleText = user.positionTitle || roleLabels[user.role] || '社员';
+  const roleText = user.positionTitle || roleLabel(user.role, customRoles) || '用户';
 
   function closeMenu() {
     setAnchorEl(null);
@@ -127,6 +127,13 @@ export function ProfileMenu({ user, personalStats, onChanged, onError, onLogout 
             <Stack direction="row" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">组别</Typography>
               <Typography variant="body2" fontWeight={800}>{personalStats?.groupName || '-'}</Typography>
+            </Stack>
+            <Stack direction="row" justifyContent="space-between">
+              <Typography variant="body2" color="text.secondary">权限组</Typography>
+              <Typography variant="body2" fontWeight={800}>
+                {roleLabel(user.role, customRoles) || '用户'}
+                {user.positionTitle ? ` · ${user.positionTitle}` : ''}
+              </Typography>
             </Stack>
             <Stack direction="row" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">当前积分</Typography>

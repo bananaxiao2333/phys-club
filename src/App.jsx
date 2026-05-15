@@ -20,6 +20,7 @@ import { MembersPage } from "./features/dashboard/MembersPage.jsx";
 import { StatisticsPage } from "./features/dashboard/StatisticsPage.jsx";
 import { MyLedgerPage } from "./features/logs/PublicPoolPage.jsx";
 import { AdminPage } from "./features/admin/AdminPage.jsx";
+import { ClubAdminPage } from "./features/admin/ClubAdminPage.jsx";
 
 const sharedComponents = {
   shape: { borderRadius: 6 },
@@ -125,6 +126,7 @@ const titles = {
   members: ["成员", "成员目录和积分排序"],
   myLedger: ["我的明细", "只展示当前登录社员自己的积分分录"],
   statistics: ["统计台", "最近一次手动统计快照"],
+  clubAdmin: ["社团管理台", "功勋铸造、销毁、转账、社费拆分、项目结算、奖励管理"],
   admin: ["管理员权限台", "权限、流水、统计和成员管理"],
   auth: ["登录", "登录后查看授权内容"],
 };
@@ -216,7 +218,7 @@ export default function App() {
 
     if (!appPayload.user || !caps.views?.myLedger) { setMyEntries([]); myEntriesLoaded.current = false; }
     else { myEntriesLoaded.current = false; setMyEntries(null); }
-    if (!appPayload.user || !caps.views?.statistics) { setStatistics(false); statsLoaded.current = false; }
+    if (!caps.views?.statistics) { setStatistics(false); statsLoaded.current = false; }
     else { statsLoaded.current = false; setStatistics(null); }
 
     await Promise.all(jobs);
@@ -235,11 +237,11 @@ export default function App() {
 
   // Lazy load statistics when user visits that page
   useEffect(() => {
-    if (activePage === 'statistics' && !statsLoaded.current && user && capabilities.views?.statistics) {
+    if (activePage === 'statistics' && !statsLoaded.current && capabilities.views?.statistics) {
       statsLoaded.current = true;
       api.statistics().then(p => setStatistics(p.statistics || false)).catch(() => setStatistics(false));
     }
-  }, [activePage, user, capabilities]);
+  }, [activePage, capabilities]);
 
   useEffect(() => {
     return onApiLoadingChange(setApiLoading);
@@ -326,12 +328,14 @@ export default function App() {
       return <DashboardPage leaderboard={leaderboard} />;
     if (activePage === "members")
       return (
-        <MembersPage groups={groups} members={leaderboard?.members || []} />
+        <MembersPage groups={groups} members={leaderboard?.members || []} customRoles={appState?.settings?.customRoles} />
       );
     if (activePage === "myLedger")
       return <MyLedgerPage entries={myEntries || []} user={user} />;
     if (activePage === "statistics")
       return statistics !== null ? <StatisticsPage statistics={statistics || null} isAdmin={user?.role === 'admin'} onStatChanged={setStatistics} /> : <Box className="center-panel"><CircularProgress /></Box>;
+    if (activePage === "clubAdmin")
+      return <ClubAdminPage settings={appState?.settings} groups={appState?.groups || []} onChanged={handleChanged} onError={handleError} />;
     if (activePage === "admin") {
       return (
         <AdminPage

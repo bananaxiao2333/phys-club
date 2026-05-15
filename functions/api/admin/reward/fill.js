@@ -1,14 +1,15 @@
 import { json, handleError, onRequestOptions } from '../../../lib/response.js';
-import { requireAuth, requireAdmin } from '../../../lib/auth.js';
-import { destroyMerit } from '../../../lib/database.js';
+import { assertCanView } from '../../../lib/database.js';
+import { requireAuth } from '../../../lib/auth.js';
+import { fillRewardPool } from '../../../lib/database.js';
 
 export async function onRequestPost(context) {
   try {
     const ctx = {};
     await requireAuth(context.request, ctx);
-    requireAdmin(ctx);
+    await assertCanView(ctx.user, 'clubAdmin');
     const body = await context.request.json();
-    const entries = await destroyMerit({ amount: body.amount, poolId: body.poolId, reason: body.reason, detail: body.detail, operatorId: ctx.user.id });
+    const entries = await fillRewardPool({ amount: body.amount, reason: body.reason, detail: body.detail, operatorId: ctx.user.id });
     return json({ entries }, 201);
   } catch (error) { return handleError(error); }
 }

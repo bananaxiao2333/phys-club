@@ -19,9 +19,9 @@ import {
 } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { Surface } from '../../components/Surface.jsx';
-import { roleAvatarSx, roleLabels } from '../../utils/format.js';
+import { roleAvatarSx, roleLabel } from '../../utils/format.js';
 
-export function MembersPage({ groups, members }) {
+export function MembersPage({ groups, members, customRoles }) {
   const [groupId, setGroupId] = useState('all');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(0);
@@ -101,7 +101,7 @@ export function MembersPage({ groups, members }) {
                       </Box>
                     </Stack>
                   </TableCell>
-                  <TableCell>{roleLabels[member.role] || '社员'}</TableCell>
+                  <TableCell>{roleLabel(member.role, customRoles) || '用户'}</TableCell>
                   <TableCell>
                     <Chip size="small" label={member.groupName} />
                   </TableCell>

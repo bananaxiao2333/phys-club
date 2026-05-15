@@ -46,7 +46,7 @@ async function request(path, options = {}) {
 
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(payload?.message || '请求失败');
+      throw new Error(`[${path}] ${payload?.message || '请求失败'}`);
     }
     return payload;
   } finally {
@@ -95,4 +95,6 @@ export const api = {
   deleteGroup: (id) => request(`/api/admin/groups?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
   batchUpdateGroup: (body) => request('/api/admin/users', { method: 'PATCH', body: { action: 'batchGroup', ...body } }),
   forcePassword: (body) => request('/api/admin/users', { method: 'PATCH', body: { action: 'forcePassword', ...body } }),
+  batchCreateUser: (body) => request('/api/admin/users', { method: 'PATCH', body: { action: 'batchCreate', ...body } }),
+  hardDeleteUser: (userId) => request('/api/admin/users', { method: 'PATCH', body: { action: 'hardDelete', userId } }),
 };

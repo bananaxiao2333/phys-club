@@ -37,12 +37,13 @@ import {
   Menu as MenuIcon,
   People as PeopleIcon,
   Person as PersonIcon,
+  AdminPanelSettings as ClubAdminIcon,
   Security as SecurityIcon
 } from '@mui/icons-material';
 import { useMemo, useState } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { api } from '../api.js';
-import { roleAvatarSx, roleLabels, signedNumber, formatTime } from '../utils/format.js';
+import { roleAvatarSx, roleLabel, signedNumber, formatTime } from '../utils/format.js';
 import { ProfileMenu } from '../features/profile/ProfileMenu.jsx';
 
 const drawerWidth = 248;
@@ -52,10 +53,17 @@ const navDefinitions = [
   { id: 'members', label: '成员', icon: <PeopleIcon /> },
   { id: 'myLedger', label: '我的明细', icon: <PersonIcon /> },
   { id: 'statistics', label: '统计台', icon: <AssessmentIcon /> },
+  { id: 'clubAdmin', label: '社团管理台', icon: <ClubAdminIcon /> },
   { id: 'admin', label: '管理员权限台', icon: <SecurityIcon />, adminOnly: true }
 ];
 
-const ROLE_RANK = { public: 0, member: 1, planner: 2, admin: 3 };
+function getRoleRank(role, customRoles) {
+  if (role === 'admin') return 99;
+  if (role === 'member') return 1;
+  if (role === 'public') return 0;
+  const cr = (customRoles || []).find(r => r.id === role);
+  return cr?.rank ?? 0;
+}
 
 // ---- Sidebar user list widget ----
 
@@ -65,8 +73,9 @@ function SidebarUsers({ activeSessions, settings, user }) {
 
   const userRole = user?.role || 'public';
   if (userRole !== 'admin') {
-    const minRank = ROLE_RANK[config.minRole] ?? 999;
-    if ((ROLE_RANK[userRole] ?? 0) < minRank) return null;
+    const cr = settings?.customRoles || [];
+    const minRank = getRoleRank(config.minRole, cr);
+    if (getRoleRank(userRole, cr) < minRank) return null;
   }
 
   const sessions = activeSessions || [];
@@ -113,7 +122,7 @@ function SidebarUsers({ activeSessions, settings, user }) {
 
 // ---- Mobile user card ----
 
-function MobileUserCard({ user, personalStats, onProfileChanged, onError, onLogout }) {
+function MobileUserCard({ user, personalStats, settings, onProfileChanged, onError, onLogout }) {
   const [statsAnchor, setStatsAnchor] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -160,7 +169,7 @@ function MobileUserCard({ user, personalStats, onProfileChanged, onError, onLogo
             {user.displayName}
           </Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
-            @{user.username} · {user.positionTitle || roleLabels[user.role] || '社员'}
+            @{user.username} · {user.positionTitle || roleLabel(user.role, settings?.customRoles) || '用户'}
           </Typography>
         </Box>
         <IconButton size="small" onClick={(e) => setStatsAnchor(e.currentTarget)}>
@@ -182,6 +191,13 @@ function MobileUserCard({ user, personalStats, onProfileChanged, onError, onLogo
             <Stack direction="row" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">组别</Typography>
               <Typography variant="body2" fontWeight={800}>{personalStats?.groupName || '-'}</Typography>
+            </Stack>
+            <Stack direction="row" justifyContent="space-between">
+              <Typography variant="body2" color="text.secondary">权限组</Typography>
+              <Typography variant="body2" fontWeight={800}>
+                {roleLabel(user.role, settings?.customRoles) || '用户'}
+                {user.positionTitle ? ` · ${user.positionTitle}` : ''}
+              </Typography>
             </Stack>
             <Stack direction="row" justifyContent="space-between">
               <Typography variant="body2" color="text.secondary">当前积分</Typography>
@@ -279,6 +295,7 @@ function Sidebar({ activePage, capabilities, user, activeSessions, settings, per
         <MobileUserCard
           user={user}
           personalStats={personalStats}
+          settings={settings}
           onProfileChanged={onProfileChanged}
           onError={onError}
           onLogout={onLogout}
@@ -404,6 +421,7 @@ export function AppShell({
               <ProfileMenu
                 user={user}
                 personalStats={personalStats}
+                customRoles={settings?.customRoles}
                 onChanged={onProfileChanged}
                 onError={onError}
                 onLogout={onLogout}

@@ -70,7 +70,7 @@ export function MeritPanel({ users, onChanged, onError }) {
     <FormControl sx={{ minWidth: 200 }} required>
       <InputLabel>社员</InputLabel>
       <Select label="社员" value={value} onChange={onChange}>
-        {users.filter(u => u.active && ['member','planner'].includes(u.role)).map(u => (
+        {users.filter(u => u.active && u.role !== 'admin').map(u => (
           <MenuItem value={u.id} key={u.id}>{u.displayName} ({u.username})</MenuItem>
         ))}
       </Select>
