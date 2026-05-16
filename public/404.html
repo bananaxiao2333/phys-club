@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 - 物理社积分系统</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%; overflow: hidden;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Roboto', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+      background: #f0f4f8;
+      color: #263238;
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: absolute;
+      inset: -60%;
+      background: url('/icon.jpg') center/contain no-repeat;
+      opacity: 0.06;
+      transform: rotate(-8deg) scale(1.6);
+      pointer-events: none;
+    }
+    .content { position: relative; z-index: 1; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .code {
+      font-size: 120px; font-weight: 900; line-height: 1;
+      background: linear-gradient(135deg, #1e88d8, #0d47a1);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .title { font-size: 22px; font-weight: 600; color: #455a64; margin-top: 8px; }
+    .path { font-size: 15px; color: #78909c; margin-top: 8px; font-family: monospace; }
+    .path span { color: #1e88d8; font-weight: 600; }
+    .btn {
+      display: inline-block; margin-top: 28px; padding: 10px 36px;
+      border: 2px solid #1e88d8; color: #1e88d8;
+      text-decoration: none; border-radius: 8px;
+      font-size: 15px; font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <div class="code">404</div>
+    <div class="title">页面不存在</div>
+    <div class="path">路径 <span id="path"></span> 不存在</div>
+    <a class="btn" href="/">返回首页</a>
+  </div>
+  <script>
+    document.getElementById('path').textContent = window.location.pathname || '/';
+  </script>
+</body>
+</html>
