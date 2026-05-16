@@ -1,4 +1,5 @@
-import { Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, Stack, TextField, Typography } from '@mui/material';
+import { TableSkeleton } from '../../components/Skeleton.jsx';
 import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
@@ -58,7 +59,7 @@ export function GroupsPanel({ users, onChanged, onError }) {
 
   const membersInGroup = (gid) => users.filter(u => u.groupId === gid).length;
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>;
+  if (loading) return <TableSkeleton rows={4} cols={3} />;
 
   return (
     <Stack spacing={2}>

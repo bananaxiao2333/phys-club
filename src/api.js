@@ -16,10 +16,11 @@ export function setToken(nextToken) {
 // ---- global loading state ----
 
 let loadingCount = 0;
+let currentRequest = '';
 const listeners = new Set();
 
 function notify() {
-  listeners.forEach((fn) => fn(loadingCount > 0));
+  listeners.forEach((fn) => fn(loadingCount > 0, currentRequest));
 }
 
 export function onApiLoadingChange(fn) {
@@ -35,6 +36,7 @@ async function request(path, options = {}) {
   };
 
   loadingCount++;
+  currentRequest = `${options.method || 'GET'} ${path}`;
   notify();
 
   try {
@@ -51,6 +53,7 @@ async function request(path, options = {}) {
     return payload;
   } finally {
     loadingCount--;
+    if (loadingCount === 0) currentRequest = '';
     notify();
   }
 }

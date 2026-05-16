@@ -1,4 +1,5 @@
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { TableSkeleton } from '../../components/Skeleton.jsx';
 import { Warning as WarningIcon } from '@mui/icons-material';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api.js';
@@ -9,7 +10,7 @@ import { SidebarPanel } from './SidebarPanel.jsx';
 import { UsersPanel } from './UsersPanel.jsx';
 
 function TabLoader({ loading, error, children }) {
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>;
+  if (loading) return <TableSkeleton rows={6} cols={5} />;
   if (error) return <Box sx={{ textAlign: 'center', py: 4 }}><Typography color="error">{error}</Typography></Box>;
   return children;
 }

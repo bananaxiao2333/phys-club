@@ -2,7 +2,6 @@ import {
   Alert,
   Box,
   Button,
-  CircularProgress,
   Fade,
   LinearProgress,
   Snackbar,
@@ -21,6 +20,7 @@ import { StatisticsPage } from "./features/dashboard/StatisticsPage.jsx";
 import { MyLedgerPage } from "./features/logs/PublicPoolPage.jsx";
 import { AdminPage } from "./features/admin/AdminPage.jsx";
 import { ClubAdminPage } from "./features/admin/ClubAdminPage.jsx";
+import { PageSkeleton } from "./components/Skeleton.jsx";
 
 const sharedComponents = {
   shape: { borderRadius: 6 },
@@ -175,6 +175,7 @@ export default function App() {
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [apiLoading, setApiLoading] = useState(false);
+  const [currentRequest, setCurrentRequest] = useState('');
   const [notice, setNotice] = useState(null);
 
   const capabilities = appState?.capabilities || {
@@ -244,7 +245,7 @@ export default function App() {
   }, [activePage, capabilities]);
 
   useEffect(() => {
-    return onApiLoadingChange(setApiLoading);
+    return onApiLoadingChange((loading, req) => { setApiLoading(loading); setCurrentRequest(req || ''); });
   }, []);
 
   useEffect(() => {
@@ -310,13 +311,7 @@ export default function App() {
   }, [groups, leaderboard, myEntries, user]);
 
   const pageContent = useMemo(() => {
-    if (loading) {
-      return (
-        <Box className="center-panel">
-          <CircularProgress />
-        </Box>
-      );
-    }
+    if (loading) return <PageSkeleton lines={5} title />;
     if (activePage === "auth")
       return (
         <AuthPanel
@@ -333,7 +328,7 @@ export default function App() {
     if (activePage === "myLedger")
       return <MyLedgerPage entries={myEntries || []} user={user} />;
     if (activePage === "statistics")
-      return statistics !== null ? <StatisticsPage statistics={statistics || null} isAdmin={user?.role === 'admin'} onStatChanged={setStatistics} /> : <Box className="center-panel"><CircularProgress /></Box>;
+      return statistics !== null ? <StatisticsPage statistics={statistics || null} isAdmin={user?.role === 'admin'} onStatChanged={setStatistics} /> : <PageSkeleton lines={4} />;
     if (activePage === "clubAdmin")
       return <ClubAdminPage settings={appState?.settings} groups={appState?.groups || []} onChanged={handleChanged} onError={handleError} />;
     if (activePage === "admin") {
@@ -366,7 +361,7 @@ export default function App() {
             position: "fixed",
             inset: 0,
             zIndex: 9999,
-            bgcolor: "rgba(30, 135, 216, 0.32)",
+            bgcolor: "rgba(30, 135, 216, 0.35)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -375,26 +370,19 @@ export default function App() {
             pointerEvents: apiLoading ? 'auto' : 'none',
           }}
         >
-          <StopIcon sx={{ fontSize: 56, color: '#fff', mb: 1, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.4))' }} />
-          <Typography
-            variant="h4"
-            fontWeight={900}
-            color="#fff"
-            letterSpacing={4}
-            sx={{ textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
-          >
+          <StopIcon sx={{ fontSize: 48, color: '#fff', mb: 1, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.4))' }} />
+          <Typography variant="h5" fontWeight={900} color="#fff" letterSpacing={3} sx={{ textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
             PLEASE STANDBY
           </Typography>
-          <Typography
-            variant="subtitle1"
-            fontWeight={600}
-            color="rgba(255,255,255,0.85)"
-            letterSpacing={2}
-            sx={{ mt: 0.5 }}
-          >
+          <Typography variant="subtitle2" fontWeight={600} color="rgba(255,255,255,0.8)" letterSpacing={1.5} sx={{ mt: 0.25 }}>
             ASJYT PHYSICS CLUB
           </Typography>
-          <LinearProgress sx={{ mt: 3, width: 260, height: 4, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.2)', '& .MuiLinearProgress-bar': { bgcolor: '#fff', borderRadius: 2 } }} />
+          <LinearProgress sx={{ mt: 2, width: 260, height: 4, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.2)', '& .MuiLinearProgress-bar': { bgcolor: '#fff', borderRadius: 2 } }} />
+          {currentRequest && (
+            <Typography variant="caption" color="rgba(255,255,255,0.7)" sx={{ mt: 1.5, fontFamily: 'monospace', letterSpacing: 0.5 }}>
+              正在向端点 {currentRequest} 执行操作……
+            </Typography>
+          )}
         </Box>
       </Fade>
       <AppShell
