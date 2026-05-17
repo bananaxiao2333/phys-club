@@ -21,7 +21,7 @@ import { useMemo, useState } from 'react';
 import { Surface } from '../../components/Surface.jsx';
 import { roleAvatarSx, roleLabel } from '../../utils/format.js';
 
-export function MembersPage({ groups, members, customRoles }) {
+export function MembersPage({ groups, members, customRoles, onViewMember }) {
   const [groupId, setGroupId] = useState('all');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(0);
@@ -89,7 +89,12 @@ export function MembersPage({ groups, members, customRoles }) {
             </TableHead>
             <TableBody>
               {visibleRows.map((member) => (
-                <TableRow key={member.id} hover>
+                <TableRow
+                  key={member.id}
+                  hover
+                  onClick={() => onViewMember?.(member.id)}
+                  sx={{ cursor: "pointer" }}
+                >
                   <TableCell>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Avatar sx={roleAvatarSx(member.role, 36)}>{member.displayName.slice(0, 1)}</Avatar>

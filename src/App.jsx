@@ -20,6 +20,7 @@ import { StatisticsPage } from "./features/dashboard/StatisticsPage.jsx";
 import { MyLedgerPage } from "./features/logs/PublicPoolPage.jsx";
 import { AdminPage } from "./features/admin/AdminPage.jsx";
 import { ClubAdminPage } from "./features/admin/ClubAdminPage.jsx";
+import { MemberDetailPage } from "./features/dashboard/MemberDetailPage.jsx";
 import { PageSkeleton } from "./components/Skeleton.jsx";
 
 const sharedComponents = {
@@ -129,11 +130,21 @@ const titles = {
   clubAdmin: ["社团管理台", "功勋铸造、销毁、转账、社费拆分、项目结算、奖励管理"],
   admin: ["管理员权限台", "权限、流水、统计和成员管理"],
   auth: ["登录", "登录后查看授权内容"],
+  memberDetail: ["成员详情", ""],
 };
 
 function getHashPage() {
   const hash = window.location.hash;
-  return hash ? hash.replace("#/", "") : "overview";
+  const page = hash ? hash.replace("#/", "") : "overview";
+  if (page.startsWith("member/")) return "memberDetail";
+  return page;
+}
+
+function getDetailMemberId() {
+  const hash = window.location.hash;
+  const page = hash ? hash.replace("#/", "") : "";
+  if (page.startsWith("member/")) return page.slice(7);
+  return null;
 }
 
 function firstAllowedPage(capabilities, sidebarOrder) {
@@ -203,7 +214,9 @@ export default function App() {
     const currentPageAllowed =
       nextPage === "auth" || nextPage === "admin"
         ? nextPage === "auth" || caps.admin
-        : caps.views?.[nextPage];
+        : nextPage === "memberDetail"
+          ? caps.views?.members
+          : caps.views?.[nextPage];
     const page = currentPageAllowed
       ? nextPage
       : firstAllowedPage(caps, appPayload.settings?.sidebarOrder);
@@ -214,7 +227,10 @@ export default function App() {
       api
         .leaderboard()
         .then((payload) => setLeaderboard(payload))
-        .catch(() => setLeaderboard(null)),
+        .catch(() => {
+          setLeaderboard(false);
+          setNotice({ severity: "error", message: "无法加载成员数据。" });
+        }),
     ];
 
     if (!appPayload.user || !caps.views?.myLedger) { setMyEntries([]); myEntriesLoaded.current = false; }
@@ -323,7 +339,12 @@ export default function App() {
       return <DashboardPage leaderboard={leaderboard} />;
     if (activePage === "members")
       return (
-        <MembersPage groups={groups} members={leaderboard?.members || []} customRoles={appState?.settings?.customRoles} />
+        <MembersPage
+          groups={groups}
+          members={leaderboard?.members || []}
+          customRoles={appState?.settings?.customRoles}
+          onViewMember={(id) => navigateTo(`member/${id}`)}
+        />
       );
     if (activePage === "myLedger")
       return <MyLedgerPage entries={myEntries || []} user={user} />;
@@ -338,6 +359,22 @@ export default function App() {
           appState={appState}
           onChanged={handleChanged}
           onError={handleError}
+        />
+      );
+    }
+    if (activePage === "memberDetail") {
+      if (leaderboard === null) return <PageSkeleton lines={4} title />;
+      const memberId = getDetailMemberId();
+      const members = leaderboard?.members || [];
+      const member = members.find((m) => m.id === memberId) || null;
+      const rank = member ? members.indexOf(member) + 1 : null;
+      return (
+        <MemberDetailPage
+          member={member}
+          groups={groups}
+          customRoles={appState?.settings?.customRoles}
+          rank={rank}
+          onBack={() => navigateTo("members")}
         />
       );
     }
@@ -386,7 +423,7 @@ export default function App() {
         </Box>
       </Fade>
       <AppShell
-        activePage={activePage}
+        activePage={activePage === "memberDetail" ? "members" : activePage}
         capabilities={capabilities}
         user={user}
         personalStats={personalStats}
